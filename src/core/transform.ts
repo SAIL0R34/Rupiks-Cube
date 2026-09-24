@@ -31,7 +31,6 @@ export interface TilePoint {
  * clamping at the borders.
  */
 export function faceToTile(state: CubeState, face: Face, u: number, v: number): TilePoint {
-  const frame = FACE_FRAME[face];
   const i = clampIdx(Math.floor(u));
   const j = clampIdx(Math.floor(v));
   return faceCellToTile(state, face, i, j, u, v);

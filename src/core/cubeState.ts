@@ -7,7 +7,7 @@
 
 import type { Mat3, Vec3 } from './rotation';
 import { IDENTITY, orientationIndex } from './rotation';
-import type { Sticker } from './stickers';
+import type { Sticker, Stroke } from './stickers';
 import { dot } from './faces';
 
 export interface Cubie {
@@ -142,7 +142,7 @@ export function totalStrokePointCount(state: CubeState): number {
 
 /** flat list of every stroke with its sticker (order: cubie asc, sticker asc) */
 export function allStrokes(state: CubeState): Array<{ stickerId: number; stroke: Stroke }> {
-  const out: Array<{ stickerId: number; stroke: import('./stickers').Stroke }> = [];
+  const out: Array<{ stickerId: number; stroke: Stroke }> = [];
   for (const c of [...state.cubies].sort((a, b) => a.id - b.id)) {
     for (const s of c.stickers) {
       for (const st of s.strokes) out.push({ stickerId: s.id, stroke: st });
