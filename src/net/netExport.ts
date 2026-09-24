@@ -55,24 +55,22 @@ async function faceDataUrl(sess: Session, face: Face): Promise<string> {
     if (!img) return;
     // tile-space px of the face-cell corners (quad maps cell → tile)
     const px = (q: { s: number; t: number }) => [q.s * CELL, (1 - q.t) * CELL] as const;
-    const [x0, y0] = px(a.quad[0]);
-    const [x1, y1] = px(a.quad[1]);
-    const [x3, y3] = px(a.quad[3]);
-    // tile-px edge vectors of the cell's x/y edges
-    const e0x = x1 - x0;
-    const e0y = y1 - y0;
-    const e1x = x3 - x0;
-    const e1y = y3 - y0;
-    const det = e0x * e1y - e0y * e1x;
+    // output-cell corners: top-left = face (i, j+1) = quad[3]; x+ → quad[2];
+    // y+ (canvas down) = face v− → quad[0]
+    const [ox, oy] = px(a.quad[3]);
+    const ex = [px(a.quad[2])[0] - ox, px(a.quad[2])[1] - oy];
+    const ey = [px(a.quad[0])[0] - ox, px(a.quad[0])[1] - oy];
+    const det = ex[0] * ey[1] - ex[1] * ey[0];
     if (Math.abs(det) < 1e-6) return;
-    // affine tile→cell: [CELL,0; 0,CELL] · [e0 e1]⁻¹
-    const ia = (CELL * e1y) / det;
-    const ib = (-CELL * e0y) / det;
-    const ic = (-CELL * e1x) / det;
-    const id = (CELL * e0x) / det;
+    // affine tile→cell: A·ex = (CELL,0), A·ey = (0,CELL)
+    const ia = (CELL * ey[1]) / det;
+    const ib = (-CELL * ey[0]) / det;
+    const ic = (-CELL * ex[1]) / det;
+    const id = (CELL * ex[0]) / det;
+    const e = dx - (ia * ox + ic * oy);
+    const f = dy - (ib * ox + id * oy);
     ctx.save();
-    ctx.translate(dx, dy);
-    ctx.transform(ia, ib, ic, id, -x0, -y0);
+    ctx.setTransform(ia, ib, ic, id, e, f);
     ctx.drawImage(img, 0, 0);
     ctx.restore();
   });

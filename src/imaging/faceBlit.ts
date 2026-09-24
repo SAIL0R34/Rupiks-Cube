@@ -60,10 +60,12 @@ export function faceCellAffines(
 }
 
 /**
- * Blit a square source image onto one tile canvas. `quad` gives where the
- * image's corners (0,0) (1,0) (1,1) (0,1) land in tile-local (s,t). For
- * integer rotations the quad is a rotated unit square; we derive the affine
- * from the two edge vectors and draw through setTransform.
+ * Blit a square source region onto one tile canvas. `quad` gives where the
+ * face-cell's corners (i,j) (i+1,j) (i+1,j+1) (i,j+1) land in tile-local
+ * (s,t). Image x+ = face u+, image y+ (down) = face v− (down) — so the
+ * source rect's top-left is the face cell's TOP-left corner, quad[3], and
+ * the source edges run to quad[2] (x+) and quad[0] (y+). For integer
+ * rotations the quad is a rotated unit square; the affine follows exactly.
  */
 export function blitCellToTileCanvas(
   tileCtx: CanvasRenderingContext2D,
@@ -77,26 +79,24 @@ export function blitCellToTileCanvas(
   // tile-space px of a point: (s·W, (1−t)·W)
   const W = tileSize;
   const px = (p: { s: number; t: number }) => [p.s * W, (1 - p.t) * W] as const;
-  const [x0, y0] = px(quad[0]);
-  const [x1, y1] = px(quad[1]);
-  const [x3, y3] = px(quad[3]);
-  // affine columns: source (W,0)→(x1−x0, y1−y0), source (0,W)→(x3−x0, y3−y0)
-  const a = (x1 - x0) / W;
-  const b = (y1 - y0) / W;
-  const c = (x3 - x0) / W;
-  const d = (y3 - y0) / W;
+  const [x3, y3] = px(quad[3]); // source (0,0) — face-cell top-left
+  const ex = [px(quad[2])[0] - x3, px(quad[2])[1] - y3]; // source x+ edge
+  const ey = [px(quad[0])[0] - x3, px(quad[0])[1] - y3]; // source y+ edge
+  const a = ex[0] / W;
+  const b = ex[1] / W;
+  const c = ey[0] / W;
+  const d = ey[1] / W;
   tileCtx.save();
   tileCtx.clearRect(0, 0, W, W);
   // clip to the tile so seams stay clean even under float fuzz
-  tileCtx.beginPath();
   const clip = new Path2D();
-  clip.moveTo(x0, y0);
-  clip.lineTo(x1, y1);
-  clip.lineTo(px(quad[2])[0], px(quad[2])[1]);
-  clip.lineTo(x3, y3);
+  clip.moveTo(...px(quad[0]));
+  clip.lineTo(...px(quad[1]));
+  clip.lineTo(...px(quad[2]));
+  clip.lineTo(...px(quad[3]));
   clip.closePath();
   tileCtx.clip(clip);
-  tileCtx.setTransform(a, b, c, d, x0, y0);
+  tileCtx.setTransform(a, b, c, d, x3, y3);
   tileCtx.imageSmoothingQuality = 'high';
   tileCtx.drawImage(source, srcX, srcY, srcSize, srcSize, 0, 0, W, W);
   tileCtx.restore();
@@ -105,6 +105,11 @@ export function blitCellToTileCanvas(
 /**
  * Produce the 9 tile paints for a face: square source image → per-cell
  * rotated crops as dataURLs (state-level; the scene applies them).
+ *
+ * Band mapping: face j=0 is the BOTTOM row of the face but image band 0 is
+ * the TOP of the picture (image y grows down) — so cell j samples image band
+ * (2−j). The in-band orientation is handled by the affine in
+ * blitCellToTileCanvas.
  */
 export function paintFaceTiles(
   state: CubeState,
@@ -119,7 +124,7 @@ export function paintFaceTiles(
     canvas.width = tileSize;
     canvas.height = tileSize;
     const ctx = canvas.getContext('2d')!;
-    blitCellToTileCanvas(ctx, squareSource, i * cellPx, j * cellPx, cellPx, quad, tileSize);
+    blitCellToTileCanvas(ctx, squareSource, i * cellPx, (2 - j) * cellPx, cellPx, quad, tileSize);
     paints.push({ stickerId, dataUrl: canvas.toDataURL('image/jpeg', 0.85) });
   }
   return paints;

@@ -24,6 +24,10 @@ export function CubeCanvas(): JSX.Element {
     registerRenderer(scene.renderer);
     const handles = buildCubeView(useCubeStore.getState().session.cube);
     scene.scene.add(handles.group);
+    if (import.meta.env.DEV) {
+      // deterministic pixel probes for E2E (dev builds only)
+      (window as unknown as { __twistdraw?: unknown }).__twistdraw = { handles, scene };
+    }
 
     const animator = new TurnAnimator(handles);
     const gesture = new TwistGesture(scene, handles);
