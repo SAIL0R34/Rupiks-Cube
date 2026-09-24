@@ -5,6 +5,8 @@ import { Onboarding } from './ui/Onboarding';
 import { ControlPanel } from './ui/ControlPanel';
 import { StatusBar } from './ui/StatusBar';
 import { HelpOverlay } from './ui/HelpOverlay';
+import { ViewControls } from './ui/ViewControls';
+import { burstConfetti } from './ui/confetti';
 import { useCubeStore, hasAllImages } from './store/useCubeStore';
 import { on } from './utils/bus';
 
@@ -16,6 +18,7 @@ export default function App(): JSX.Element {
     const un = on('celebrate', () => {
       setCelebrate(true);
       setTimeout(() => setCelebrate(false), 1700);
+      burstConfetti();
     });
     return un;
   }, []);
@@ -28,6 +31,7 @@ export default function App(): JSX.Element {
       <CubeCanvas />
       {!started && <Onboarding />}
       <StatusBar />
+      <ViewControls />
       <ControlPanel />
       {started && <HelpOverlay />}
     </div>

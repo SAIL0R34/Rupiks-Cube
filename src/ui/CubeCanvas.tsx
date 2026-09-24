@@ -12,6 +12,7 @@ import { TurnAnimator } from '../three/TurnAnimator';
 import { TwistGesture } from '../three/TwistGesture';
 import { useCubeStore } from '../store/useCubeStore';
 import { registerRenderer } from '../three/viewExport';
+import { on } from '../utils/bus';
 
 export function CubeCanvas(): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +27,7 @@ export function CubeCanvas(): JSX.Element {
     scene.scene.add(handles.group);
     if (import.meta.env.DEV) {
       // deterministic pixel probes for E2E (dev builds only)
-      (window as unknown as { __twistdraw?: unknown }).__twistdraw = { handles, scene };
+      (window as unknown as { __twistdraw?: unknown }).__twistdraw = { handles, scene, store: useCubeStore };
     }
 
     const animator = new TurnAnimator(handles);
@@ -48,8 +49,14 @@ export function CubeCanvas(): JSX.Element {
     const ro = new ResizeObserver(onResize);
     ro.observe(container);
 
+    // view-rotation buttons (never interfere with twist gestures)
+    const unOrbit = on('camera-orbit', ({ dTheta, dPhi }) => scene.orbitBy(dTheta, dPhi));
+    const unReset = on('camera-reset', () => scene.resetView());
+
     return () => {
       unsub();
+      unOrbit();
+      unReset();
       window.removeEventListener('resize', onResize);
       ro.disconnect();
       gesture.dispose();

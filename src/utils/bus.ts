@@ -5,6 +5,10 @@
 
 export type BusEvents = {
   'camera-look': { face: 'U' | 'D' | 'L' | 'R' | 'F' | 'B' };
+  /** orbit the view by deltas (radians, spherical) without touching the cube */
+  'camera-orbit': { dTheta: number; dPhi: number };
+  /** reset the view to the default pose */
+  'camera-reset': {};
   'upload-request': {};
   'abort-plot': {};
   'celebrate': {};

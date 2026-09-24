@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
+const DEFAULT_CAMERA_POS = new THREE.Vector3(5.0, 3.9, 6.2);
+
 export class SceneManager {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
@@ -45,7 +47,7 @@ export class SceneManager {
     this.scene = new THREE.Scene(); // transparent — the page gradient shows
 
     this.camera = new THREE.PerspectiveCamera(26, 1, 0.1, 60);
-    this.camera.position.set(5.0, 3.9, 6.2);
+    this.camera.position.copy(DEFAULT_CAMERA_POS);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -116,9 +118,73 @@ export class SceneManager {
     this.renderer.setSize(w, h);
   }
 
+  // --- programmatic view motion (buttons; never touches cube state) ---------
+
+  private orbitTween: number | null = null;
+
+  /** tween the camera around the origin by spherical deltas (radians) */
+  orbitBy(dTheta: number, dPhi: number, ms = 380): void {
+    const sph = new THREE.Spherical().setFromVector3(
+      this.camera.position.clone().sub(this.controls.target),
+    );
+    const from = { theta: sph.theta, phi: sph.phi, radius: sph.radius };
+    const to = {
+      theta: from.theta + dTheta,
+      phi: THREE.MathUtils.clamp(from.phi + dPhi, 0.35, Math.PI - 0.35),
+      radius: from.radius,
+    };
+    this.runViewTween(from, to, ms);
+  }
+
+  /** tween back to the default framing pose */
+  resetView(ms = 420): void {
+    const defaultSph = new THREE.Spherical().setFromVector3(
+      DEFAULT_CAMERA_POS.clone().sub(this.controls.target),
+    );
+    const sph = new THREE.Spherical().setFromVector3(
+      this.camera.position.clone().sub(this.controls.target),
+    );
+    // unwrap theta so we take the short way around
+    let dTheta = defaultSph.theta - sph.theta;
+    while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+    while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+    this.runViewTween(
+      { theta: sph.theta, phi: sph.phi, radius: sph.radius },
+      { theta: sph.theta + dTheta, phi: defaultSph.phi, radius: defaultSph.radius },
+      ms,
+    );
+  }
+
+  private runViewTween(
+    from: { theta: number; phi: number; radius: number },
+    to: { theta: number; phi: number; radius: number },
+    ms: number,
+  ): void {
+    if (this.orbitTween !== null) cancelAnimationFrame(this.orbitTween);
+    const t0 = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      const sph = new THREE.Spherical(
+        THREE.MathUtils.lerp(from.radius, to.radius, e),
+        THREE.MathUtils.lerp(from.phi, to.phi, e),
+        THREE.MathUtils.lerp(from.theta, to.theta, e),
+      );
+      this.camera.position.setFromSpherical(sph).add(this.controls.target);
+      this.camera.lookAt(this.controls.target);
+      if (t < 1) {
+        this.orbitTween = requestAnimationFrame(step);
+      } else {
+        this.orbitTween = null;
+      }
+    };
+    step();
+  }
+
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
+    if (this.orbitTween !== null) cancelAnimationFrame(this.orbitTween);
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

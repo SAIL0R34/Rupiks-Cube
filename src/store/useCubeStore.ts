@@ -56,6 +56,8 @@ interface CubeStore {
   repaintFace: Face | null;
   banner: { text: string; at: number } | null;
   sessionRestored: boolean;
+  /** celebration fires only on not-solved → solved transitions */
+  wasSolved: boolean;
 
   // --- turn machinery ---
   enqueueTurns: (tokens: MoveToken[], opts?: Partial<Omit<TurnBatch, 'tokens'>>) => boolean;
@@ -67,6 +69,7 @@ interface CubeStore {
   pushCommand: (cmd: Command) => void;
   undo: () => void;
   redo: () => void;
+  checkSolved: () => void;
 
   // --- painting ---
   setFaceImage: (face: Face, sourceDataUrl: string) => Promise<void>;
@@ -102,6 +105,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
   repaintFace: null,
   banner: null,
   sessionRestored: false,
+  wasSolved: false,
 
   // --- turns ---
 
@@ -140,12 +144,32 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     if (done.undoable && done.tokens.length > 0) {
       get().pushCommand({ kind: 'moves', tokens: done.tokens });
     }
-    let banner = state.banner;
-    if (session.reference && matchesReference(session, session.reference) && done.label === 'solve') {
-      banner = { text: 'Solved — picture restored', at: Date.now() };
-      emit('celebrate', {});
+    set({ turnBatches: remaining, busy: remaining.length > 0 ? 'turning' : 'idle' });
+    get().checkSolved();
+  },
+
+  /**
+   * Fire the celebration on not-solved → solved transitions, however the
+   * cube got there: the solve button, manual twisting, or undo. A fresh
+   * reference snapshot seeds the state silently.
+   */
+  checkSolved: () => {
+    const s = get();
+    const sess = s.session;
+    if (!sess.reference) {
+      if (s.wasSolved) set({ wasSolved: false });
+      return;
     }
-    set({ turnBatches: remaining, busy: remaining.length > 0 ? 'turning' : 'idle', banner });
+    const now = matchesReference(sess, sess.reference);
+    if (now && !s.wasSolved) {
+      set({
+        wasSolved: true,
+        banner: { text: 'Solved — picture restored', at: Date.now() },
+      });
+      emit('celebrate', {});
+    } else if (!now && s.wasSolved) {
+      set({ wasSolved: false });
+    }
   },
 
   markAnimating: (v) => set({ animating: v }),
@@ -185,6 +209,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       undoStack: s.undoStack.slice(0, -1),
       redoStack: [...s.redoStack, cmd],
     });
+    get().checkSolved();
   },
 
   redo: () => {
@@ -212,6 +237,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       redoStack: s.redoStack.slice(0, -1),
       undoStack: [...s.undoStack, cmd],
     });
+    get().checkSolved();
   },
 
   // --- painting ---
@@ -231,6 +257,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     applyCommandEffect(session, { kind: 'setTiles', items });
     set({ session, version: get().version + 1 });
     get().pushCommand({ kind: 'setTiles', items });
+    get().checkSolved(); // a repaint un-solves; update the transition tracker
   },
 
   startPuzzle: async (images) => {
@@ -250,6 +277,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     s.session.reference = next;
     set({ session: s.session, version: s.version + 1 });
     get().pushCommand({ kind: 'setReference', prev, next });
+    // the fresh snapshot IS solved — seed the tracker silently (no confetti)
+    set({ wasSolved: true });
     set({ banner: { text: 'Ready — drag a row or column to twist', at: Date.now() } });
   },
 
@@ -307,6 +336,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       version: get().version + 1,
       repaintFace: null,
       banner: null,
+      wasSolved: false,
     });
   },
 }));

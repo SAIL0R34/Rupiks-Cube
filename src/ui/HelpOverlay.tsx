@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 const KEYS: Array<[string, string]> = [
   ['drag a row / column', 'twist that layer — middle rows work too'],
   ['drag empty space', 'orbit the cube (wheel zooms)'],
+  ['◀ ▶ ▲ ▼ (left edge)', 'rotate the view with buttons · ⌂ resets it'],
   ['U D L R F B', 'twist that face (+⇧ for the other way)'],
   ['M E S', 'twist the middle slices'],
   ['Space', 'scramble'],
