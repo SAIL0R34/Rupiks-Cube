@@ -11,6 +11,8 @@ import { emit } from '../utils/bus';
 import { abortPlot } from '../plotting/PlotSession';
 import { serializeSave, deserializeSave } from '../core/serialize';
 import { downloadJSON } from '../utils/download';
+import { downloadNetSVG, downloadNetPNG } from '../net/netExport';
+import { downloadView } from '../three/viewExport';
 
 const COMPLEXITIES: Complexity[] = ['minimal', 'standard', 'obsessed'];
 
@@ -124,6 +126,9 @@ export function ControlPanel(): JSX.Element {
             e.target.value = '';
           }}
         />
+        <button onClick={() => downloadNetSVG(useCubeStore.getState().session)}>net svg</button>
+        <button onClick={() => void downloadNetPNG(useCubeStore.getState().session)}>net png</button>
+        <button onClick={() => void downloadView()}>view png</button>
       </div>
     </div>
   );

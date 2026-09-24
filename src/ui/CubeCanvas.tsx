@@ -13,6 +13,7 @@ import { CursorView } from '../three/CursorView';
 import { TurnAnimator } from '../three/TurnAnimator';
 import { useCubeStore } from '../store/useCubeStore';
 import { stampDevMarkers } from '../three/devMarkers';
+import { registerRenderer } from '../three/viewExport';
 import { tickPlot } from '../plotting/PlotSession';
 import { on } from '../utils/bus';
 import type { Face } from '../core/faces';
@@ -26,6 +27,7 @@ export function CubeCanvas(): JSX.Element {
     if (!container) return;
 
     const scene = new SceneManager(container);
+    registerRenderer(scene.renderer);
     const handles = buildCubeView(useCubeStore.getState().session.cube);
     scene.scene.add(handles.group);
 
