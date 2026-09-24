@@ -13,6 +13,7 @@ import { CursorView } from '../three/CursorView';
 import { TurnAnimator } from '../three/TurnAnimator';
 import { useCubeStore } from '../store/useCubeStore';
 import { stampDevMarkers } from '../three/devMarkers';
+import { tickPlot } from '../plotting/PlotSession';
 import { on } from '../utils/bus';
 import type { Face } from '../core/faces';
 import { FACE_FRAME, facePoint } from '../core/faces';
@@ -34,6 +35,7 @@ export function CubeCanvas(): JSX.Element {
     const animator = new TurnAnimator(handles);
     scene.onUpdate((dt) => {
       animator.update(dt);
+      tickPlot(dt, handles);
       const s = useCubeStore.getState();
       cursor.update(s.activeFace, s.cursor.u, s.cursor.v, s.cursor.visible);
     });
