@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CubeCanvas } from './ui/CubeCanvas';
 import { useKeyboard } from './ui/useKeyboard';
 import { KnobDeck } from './ui/KnobDeck';
@@ -14,13 +14,19 @@ import { on } from './utils/bus';
 export default function App(): JSX.Element {
   useKeyboard();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [celebrate, setCelebrate] = useState(false);
 
   useEffect(() => {
     const unUpload = on('upload-request', () => fileInputRef.current?.click());
     const unAbort = on('abort-plot', () => abortPlot());
+    const unCelebrate = on('celebrate', () => {
+      setCelebrate(true);
+      setTimeout(() => setCelebrate(false), 1700);
+    });
     return () => {
       unUpload();
       unAbort();
+      unCelebrate();
     };
   }, []);
 
@@ -43,6 +49,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app">
+      {celebrate && <div className="celebrate-glow" />}
       <CubeCanvas />
       <input
         ref={fileInputRef}

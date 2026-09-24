@@ -17,9 +17,16 @@ export function StatusBar(): JSX.Element {
 
   const active = plotting.status !== 'idle';
   const hasPendingPlot = pendingPlotResume != null && busy === 'idle';
+  const solving =
+    busy === 'turning' && useCubeStore.getState().turnBatches[0]?.label === 'solve';
 
   return (
     <div className="status-bar">
+      {solving && (
+        <div className="plot-stage">
+          solving… {useCubeStore.getState().turnBatches[0].tokens.length} turns to go
+        </div>
+      )}
       {hasPendingPlot && (
         <div className="resume-prompt">
           <div className="resume-note">unfinished etch found</div>

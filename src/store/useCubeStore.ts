@@ -28,6 +28,7 @@ import { tileToFace } from '../core/transform';
 import { generateScramble } from '../core/scramble';
 import { splitPolylineOnFace } from '../core/strokeSplitter';
 import { clamp } from '../utils/geometry2d';
+import { emit } from '../utils/bus';
 
 export type Busy = 'idle' | 'turning' | 'plotting';
 export type Mode = 'idle' | 'pen' | 'erase';
@@ -240,6 +241,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       done.label === 'solve'
     ) {
       banner = { text: 'SOLVED — artwork restored', at: Date.now() };
+      emit('celebrate', {});
     }
     set({ turnBatches: remaining, busy: stillBusy ? 'turning' : 'idle', banner });
   },

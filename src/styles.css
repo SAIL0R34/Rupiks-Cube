@@ -183,6 +183,69 @@ body,
   color: #9df0bd;
 }
 
+/* solve celebration */
+
+.celebrate-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(157, 240, 189, 0.35) 0%,
+    rgba(157, 240, 189, 0.12) 45%,
+    transparent 75%
+  );
+  animation: glow-pulse 1.7s ease-in-out;
+}
+
+@keyframes glow-pulse {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.resume-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resume-note {
+  font-size: 11px;
+  color: #ffd9a0;
+}
+
+.resume-row {
+  display: flex;
+  gap: 6px;
+}
+
+.resume-row button {
+  background: rgba(24, 24, 28, 0.85);
+  color: #e8e4dc;
+  border: 1px solid rgba(232, 228, 220, 0.18);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.resume-row button.accent {
+  border-color: rgba(96, 220, 140, 0.6);
+  background: rgba(96, 220, 140, 0.12);
+}
+
 /* knobs */
 
 .knob-deck {
