@@ -46,8 +46,15 @@ export function installSessionStore(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
   });
-  window.addEventListener('beforeunload', flush);
   window.addEventListener('pagehide', flush);
+  // mid-turn state is not serialized — warn before losing it
+  window.addEventListener('beforeunload', (e) => {
+    flush();
+    if (useCubeStore.getState().busy === 'turning') {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 }
 
 function scheduleSave(): void {
