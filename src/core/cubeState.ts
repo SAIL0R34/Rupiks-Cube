@@ -2,12 +2,13 @@
  * CubeState: 26 cubies (the 3×3×3 minus the hidden core) + position index.
  *
  * Cubie: integer position ∈ {−1,0,1}³ and interned orientation matrix R with
- * `p_world = R·p_local + pos`. Stickers are owned by their cubie forever.
+ * `p_world = R·p_local + pos`. Stickers are owned by their cubie forever;
+ * tile CONTENT (image dataURLs) lives in the Session, addressed by sticker id.
  */
 
 import type { Mat3, Vec3 } from './rotation';
 import { IDENTITY, orientationIndex } from './rotation';
-import type { Sticker, Stroke } from './stickers';
+import type { Sticker } from './stickers';
 import { dot } from './faces';
 
 export interface Cubie {
@@ -52,12 +53,10 @@ export function createSolvedCube(): CubeState {
         ];
         for (const [coord, unit] of axes) {
           if (coord === 0) continue;
-          const localNormal: Vec3 = [coord * unit[0], coord * unit[1], coord * unit[2]];
           stickers.push({
             id: stickerId++,
             cubieId,
-            localNormal,
-            strokes: [],
+            localNormal: [coord * unit[0], coord * unit[1], coord * unit[2]],
           });
         }
         cubies.push({ id: cubieId++, pos: [x, y, z], R: IDENTITY, stickers });
@@ -69,15 +68,9 @@ export function createSolvedCube(): CubeState {
   return state;
 }
 
-/** deep structural clone (tests, snapshots, serialization prep) */
+/** deep structural clone (snapshots, serialization prep) */
 export function cloneCubeState(state: CubeState): CubeState {
-  const cubies = state.cubies.map((c) => ({
-    ...c,
-    stickers: c.stickers.map((s) => ({
-      ...s,
-      strokes: s.strokes.map((st) => ({ ...st, pts: st.pts.slice() })),
-    })),
-  }));
+  const cubies = state.cubies.map((c) => ({ ...c, stickers: c.stickers.map((s) => ({ ...s })) }));
   const out: CubeState = { cubies, posIndex: new Map() };
   rebuildIndex(out);
   return out;
@@ -92,28 +85,17 @@ export function cubeStatesEqual(a: CubeState, b: CubeState): boolean {
     if (orientationIndex(ca.R) !== orientationIndex(cb.R)) return false;
     if (ca.stickers.length !== cb.stickers.length) return false;
     for (let i = 0; i < ca.stickers.length; i++) {
-      const sa = ca.stickers[i];
-      const sb = cb.stickers[i];
-      if (sa.id !== sb.id || sa.strokes.length !== sb.strokes.length) return false;
-      for (let k = 0; k < sa.strokes.length; k++) {
-        const ta = sa.strokes[k];
-        const tb = sb.strokes[k];
-        if (ta.id !== tb.id || ta.pts.length !== tb.pts.length) return false;
-        for (let p = 0; p < ta.pts.length; p++) {
-          if (ta.pts[p] !== tb.pts[p]) return false;
-        }
-      }
+      if (ca.stickers[i].id !== cb.stickers[i].id) return false;
     }
   }
   return true;
 }
 
-/** structural invariants: 26 cubies, 54 stickers, valid cubie positions */
+/** structural invariants: 26 cubies, 54 stickers, valid positions */
 export function checkInvariants(state: CubeState): void {
   if (state.cubies.length !== 26) throw new Error(`expected 26 cubies, got ${state.cubies.length}`);
-  const stickerCount = state.cubies.reduce((n, c) => n + c.stickers.length, 0);
-  if (stickerCount !== 54) throw new Error(`expected 54 stickers, got ${stickerCount}`);
   const stickerIds = new Set<number>();
+  let stickerCount = 0;
   for (const c of state.cubies) {
     for (const v of c.pos) {
       if (!Number.isInteger(v) || Math.abs(v) > 1) {
@@ -123,35 +105,15 @@ export function checkInvariants(state: CubeState): void {
     for (const s of c.stickers) {
       if (s.cubieId !== c.id) throw new Error(`sticker ${s.id} claims cubie ${s.cubieId}, lives on ${c.id}`);
       stickerIds.add(s.id);
+      stickerCount++;
     }
   }
+  if (stickerCount !== 54) throw new Error(`expected 54 stickers, got ${stickerCount}`);
   if (stickerIds.size !== 54) throw new Error(`duplicate sticker ids: ${stickerIds.size} unique`);
   if (state.posIndex.size !== 26) throw new Error(`posIndex has ${state.posIndex.size} entries`);
 }
 
-/** total number of stroke points across the whole cube (conservation checks) */
-export function totalStrokePointCount(state: CubeState): number {
-  let n = 0;
-  for (const c of state.cubies) {
-    for (const s of c.stickers) {
-      for (const st of s.strokes) n += st.pts.length / 2;
-    }
-  }
-  return n;
-}
-
-/** flat list of every stroke with its sticker (order: cubie asc, sticker asc) */
-export function allStrokes(state: CubeState): Array<{ stickerId: number; stroke: Stroke }> {
-  const out: Array<{ stickerId: number; stroke: Stroke }> = [];
-  for (const c of [...state.cubies].sort((a, b) => a.id - b.id)) {
-    for (const s of c.stickers) {
-      for (const st of s.strokes) out.push({ stickerId: s.id, stroke: st });
-    }
-  }
-  return out;
-}
-
-/** the 9 cubies of a face's outer layer: dot(pos, n) === 1 */
+/** the 9 cubies of an outer layer (dot(pos, n) === 1) */
 export function layerCubies(state: CubeState, n: Vec3): Cubie[] {
   return state.cubies.filter((c) => dot(c.pos, n) === 1);
 }

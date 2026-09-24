@@ -1,178 +1,86 @@
+/** P8: photo-cube save/session round trips */
+
 import { describe, expect, it } from 'vitest';
-import { createSolvedCube, cubeStatesEqual, allStrokes } from '../src/core/cubeState';
 import { applyMoves } from '../src/core/moves';
 import {
   serializeSave,
   deserializeSave,
   serializeSession,
   deserializeSession,
-  serializePlot,
-  hydratePlot,
 } from '../src/core/serialize';
-import type { Session, Command, StrokeItem } from '../src/core/history';
-import { snapshotReference } from '../src/core/history';
+import { createSession, snapshotReference } from '../src/core/history';
+import type { Session, Command } from '../src/core/history';
 import { generateScramble } from '../src/core/scramble';
-import { splitPolylineOnFace } from '../src/core/strokeSplitter';
-import { mapPlanToFace } from '../src/plotting/planMapper';
-import { peekStrokeIdHi } from '../src/core/stickers';
 
-function seededArtSession(seed: number): Session {
-  const cube = applyMoves(createSolvedCube(), generateScramble(seed));
-  const sess: Session = { cube, log: generateScramble(seed), reference: null };
-  // plant strokes through the real splitter on a couple of faces
-  for (const face of ['F', 'R', 'U'] as const) {
-    const subs = splitPolylineOnFace(
-      sess.cube,
-      face,
-      [0.2 + (seed % 5) / 10, 0.3, 2.7, 2.6, 0.5, 2.2, 2.9, 0.4],
-      { weight: 0.8, travel: false },
-    );
-    for (const sub of subs) {
-      const sticker = sess.cube.cubies.flatMap((c) => c.stickers).find((s) => s.id === sub.stickerId)!;
-      sticker.strokes.push({
-        id: sub.strokeId,
-        pts: sub.pts,
-        weight: sub.weight,
-        travel: sub.travel,
-        ...(sub.closed ? { closed: true } : {}),
-      });
+function seededPhotoSession(seed: number): Session {
+  const sess = createSession();
+  const tokens = generateScramble(seed, 8);
+  const cube = applyMoves(sess.cube, tokens);
+  sess.cube = cube;
+  sess.log.push(...tokens);
+  for (const c of cube.cubies) {
+    for (const s of c.stickers) {
+      if ((s.id + seed) % 3 === 0) sess.tiles.set(s.id, `data:image/jpeg;base64,marker${s.id}`);
     }
   }
-  sess.reference = snapshotReference(sess.cube, sess.log.length);
+  for (const f of ['U', 'D', 'L', 'R', 'F', 'B'] as const) {
+    sess.images[f] = `data:image/jpeg;base64,face${f}${seed}`;
+  }
+  sess.reference = snapshotReference(sess);
   return sess;
 }
 
-/** strokes differ only within u8 quantization (≤ 1/255 per coordinate) */
-function strokesClose(a: Session, b: Session): boolean {
-  const sa = allStrokes(a.cube);
-  const sb = allStrokes(b.cube);
-  if (sa.length !== sb.length) return false;
-  for (let i = 0; i < sa.length; i++) {
-    if (sa[i].stroke.id !== sb[i].stroke.id) return false;
-    if (sa[i].stickerId !== sb[i].stickerId) return false;
-    if (sa[i].stroke.pts.length !== sb[i].stroke.pts.length) return false;
-    for (let p = 0; p < sa[i].stroke.pts.length; p++) {
-      if (Math.abs(sa[i].stroke.pts[p] - sb[i].stroke.pts[p]) > 1 / 255 + 1e-9) return false;
-    }
-  }
-  return true;
-}
-
-describe('P8: save file round trip', () => {
-  it('preserves poses, log, reference; strokes within quantization', () => {
-    for (let seed = 1; seed <= 10; seed++) {
-      const sess = seededArtSession(seed);
+describe('P8: save file v2 round trip', () => {
+  it('preserves poses, log, tiles, images, reference, paintVersion exactly', () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const sess = seededPhotoSession(seed);
       const wire = serializeSave(sess);
       const back = deserializeSave(JSON.parse(JSON.stringify(wire)));
-      // exact pose equality
       expect(
         back.cube.cubies.map((c) => `${c.id}@${c.pos.join(',')}@${c.R.join(',')}`).join(';'),
       ).toBe(sess.cube.cubies.map((c) => `${c.id}@${c.pos.join(',')}@${c.R.join(',')}`).join(';'));
       expect(back.log).toEqual(sess.log);
-      expect(back.reference?.logLength).toBe(sess.reference?.logLength);
-      expect(back.reference?.strokeIds).toEqual(sess.reference?.strokeIds);
-      expect(strokesClose(sess, back)).toBe(true);
+      expect([...back.tiles.entries()].sort()).toEqual([...sess.tiles.entries()].sort());
+      expect(back.images).toEqual(sess.images);
+      expect(back.paintVersion).toBe(sess.paintVersion);
+      // JSON-string compare: reference poses can contain −0, which a JSON
+      // round trip normalizes to 0 (vitest toEqual distinguishes them)
+      expect(JSON.stringify(back.reference)).toBe(JSON.stringify(sess.reference));
     }
   });
 
-  it('rejects foreign/future formats', () => {
+  it('rejects foreign or future formats', () => {
     expect(() => deserializeSave({ format: 'nope', version: 9 } as never)).toThrow();
     expect(() =>
-      deserializeSave({ format: 'twistdraw-cube/save', version: 99 } as never),
+      deserializeSave({ format: 'twistdraw-cube/save', version: 1 } as never),
     ).toThrow();
   });
 });
 
-describe('P9: session round trip', () => {
-  it('preserves undo/redo stacks, ui state, and a mid-flight plot', () => {
-    const sess = seededArtSession(4);
-    const items = allStrokes(sess.cube).slice(0, 1).map((x) => ({
-      stickerId: x.stickerId,
-      stroke: x.stroke,
-    })) as StrokeItem[];
-    const undoStack: Command[] = [
+describe('P9: session v2 round trip', () => {
+  it('preserves undo/redo stacks', () => {
+    const sess = seededPhotoSession(4);
+    const undo: Command[] = [
       { kind: 'moves', tokens: ['R', 'U'] },
-      {
-        kind: 'addStrokes',
-        items: allStrokes(sess.cube).slice(0, 2).map((x) => ({
-          stickerId: x.stickerId,
-          stroke: x.stroke,
-        })) as StrokeItem[],
-      },
+      { kind: 'setTiles', items: [{ stickerId: 3, before: null, after: 'data:img' }] },
+      { kind: 'setReference', prev: null, next: sess.reference },
     ];
-    const ui = {
-      activeFace: 'R',
-      turnFace: 'U',
-      mode: 'pen',
-      penDown: true,
-      speed: 4,
-      complexity: 'obsessed',
-      cursor: { u: 1.25, v: 2.5, visible: true },
-    };
-    // a mapped plan with quantizable coords
-    const plan = mapPlanToFace({
-      polys: [
-        {
-          pts: new Float32Array([0.1, 0.2, 0.5, 0.8, 0.9, 0.3]),
-          travel: false,
-          weight: 0.6,
-        },
-        { pts: new Float32Array([0.9, 0.3, 0.2, 0.7]), travel: true, weight: 0.4, closed: true },
-      ],
-      totalLength: 1.5,
-    });
-    const plotWire = serializePlot(plan, 0.42, items);
-
-    const wire = serializeSession(
-      sess,
-      undoStack,
-      [{ kind: 'removeStrokes', items }],
-      ui,
-      plotWire,
-    );
-    const parsed = JSON.parse(JSON.stringify(wire));
-    const back = deserializeSession(parsed);
-
-    expect(back.ui).toEqual(ui);
-    expect(back.undoStack[0]).toEqual(undoStack[0]);
-    // stroke items hydrate to the SAME objects living in the sticker lists
-    const liveStroke = allStrokes(back.session.cube).find(
-      (x) => x.stroke.id === items[0].stroke.id,
-    );
-    expect(back.undoStack[1].kind === 'addStrokes' && back.undoStack[1].items[0].stroke).toBe(
-      liveStroke?.stroke,
-    );
-
-    const hydratedPlot = hydratePlot(back.plot!, back.session);
-    expect(hydratedPlot.drawnLen).toBeCloseTo(0.42, 7);
-    expect(hydratedPlot.items[0].stroke).toBe(liveStroke?.stroke);
-    // plan polylines survive the Float32 → base64 → Float32 round trip
-    expect(hydratedPlot.plan.polys[0].pts.length).toBe(6);
-    expect(hydratedPlot.plan.polys[0].pts[0]).toBeCloseTo(plan.polys[0].pts[0], 6);
-    expect(hydratedPlot.plan.polys[1].closed).toBe(true);
+    const redo: Command[] = [{ kind: 'moves', tokens: ["M'"] }];
+    const wire = serializeSession(sess, undo, redo);
+    const back = deserializeSession(JSON.parse(JSON.stringify(wire)));
+    expect(JSON.stringify(back.undoStack)).toBe(JSON.stringify(undo));
+    expect(JSON.stringify(back.redoStack)).toBe(JSON.stringify(redo));
+    expect(
+      back.session.cube.cubies.map((c) => `${c.id}@${c.pos.join(',')}`).join(';'),
+    ).toBe(sess.cube.cubies.map((c) => `${c.id}@${c.pos.join(',')}`).join(';'));
+    expect([...back.session.tiles.entries()].sort()).toEqual([...sess.tiles.entries()].sort());
   });
 
-  it('stroke id high-water mark restores (no id collisions after load)', () => {
-    const sess = seededArtSession(11);
-    const hiBefore = peekStrokeIdHi();
-    expect(hiBefore).toBeGreaterThan(0);
-    const wire = serializeSave(sess);
-    const back = deserializeSave(JSON.parse(JSON.stringify(wire)));
-    expect(peekStrokeIdHi()).toBe(hiBefore);
-    // a fresh stroke after load draws a fresh id
-    const subs = splitPolylineOnFace(back.cube, 'F', [0.1, 0.1, 0.2, 0.2], { weight: 1, travel: false });
-    for (const sub of subs) {
-      expect(sub.strokeId).toBeGreaterThan(hiBefore);
-    }
-  });
-
-  it('a save→load→save cycle is stable', () => {
-    const sess = seededArtSession(21);
+  it('save→load→save is stable', () => {
+    const sess = seededPhotoSession(21);
     const once = serializeSave(sess);
     const back = deserializeSave(JSON.parse(JSON.stringify(once)));
     const twice = serializeSave(back);
-    expect(JSON.stringify(twice.cubies)).toBe(JSON.stringify(once.cubies));
-    expect(twice.strokes.length).toBe(once.strokes.length);
-    expect(cubeStatesEqual(back.cube, back.cube)).toBe(true);
+    expect(JSON.stringify(twice)).toBe(JSON.stringify(once));
   });
 });

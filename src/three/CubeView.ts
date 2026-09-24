@@ -3,10 +3,10 @@
  *
  * Every sticker plane is created ONCE in cubie-local space and parented to its
  * cubie mesh; its local transform never changes. Cubie meshes get their world
- * transform from the core state (position + orientation matrix). A layer turn
- * animates in the scene graph via a temporary pivot group (TurnAnimator) and
- * the commit snaps meshes back to exact integer-derived transforms — so the
- * scene is always re-derivable from core state (syncScene).
+ * transform from the core state (position + orientation matrix). Layer turns
+ * animate via a temporary pivot group (TurnAnimator / TwistGesture) and the
+ * commit snaps meshes back to exact integer-derived transforms — the scene is
+ * always re-derivable from core state (syncScene).
  */
 
 import * as THREE from 'three';
@@ -14,19 +14,18 @@ import type { CubeState } from '../core/cubeState';
 import { FACE_FRAME, faceOfNormal } from '../core/faces';
 import type { Face } from '../core/faces';
 import type { Mat3, Vec3 } from '../core/rotation';
-import type { Sticker, Stroke } from '../core/stickers';
+import type { Sticker } from '../core/stickers';
 import { StickerTexture } from './StickerTexture';
 
 const CUBIE_SIZE = 1;
 const STICKER_OFFSET = 0.512; // half cubie + small gap so art floats above seams
-const CUBIE_COLOR = 0x18181c;
+const CUBIE_COLOR = 0x26221d; // warm near-black, sits in the cream scene
 
 export interface CubeViewHandles {
   group: THREE.Group;
   cubieMeshes: Map<number, THREE.Mesh>;
   stickerTextures: Map<number, StickerTexture>;
   stickerPlanes: Map<number, THREE.Mesh>;
-  /** shared disposables */
   bodyGeometry: THREE.BoxGeometry;
   planeGeometry: THREE.PlaneGeometry;
 }
@@ -37,17 +36,19 @@ export function buildCubeView(state: CubeState): CubeViewHandles {
   const stickerTextures = new Map<number, StickerTexture>();
   const stickerPlanes = new Map<number, THREE.Mesh>();
 
-  const bodyGeometry = new THREE.BoxGeometry(CUBIE_SIZE * 0.98, CUBIE_SIZE * 0.98, CUBIE_SIZE * 0.98);
-  const planeGeometry = new THREE.PlaneGeometry(CUBIE_SIZE * 0.96, CUBIE_SIZE * 0.96);
+  const bodyGeometry = new THREE.BoxGeometry(CUBIE_SIZE * 0.985, CUBIE_SIZE * 0.985, CUBIE_SIZE * 0.985);
+  const planeGeometry = new THREE.PlaneGeometry(CUBIE_SIZE * 0.99, CUBIE_SIZE * 0.99);
   const bodyMaterial = new THREE.MeshStandardMaterial({
     color: CUBIE_COLOR,
-    roughness: 0.55,
-    metalness: 0.15,
+    roughness: 0.42,
+    metalness: 0.06,
   });
 
   for (const cubie of state.cubies) {
     const mesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
     mesh.userData.cubieId = cubie.id;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     group.add(mesh);
     cubieMeshes.set(cubie.id, mesh);
 
@@ -56,8 +57,9 @@ export function buildCubeView(state: CubeState): CubeViewHandles {
       stickerTextures.set(sticker.id, tex);
       const plane = new THREE.Mesh(
         planeGeometry,
-        new THREE.MeshStandardMaterial({ map: tex.texture, roughness: 0.85, metalness: 0 }),
+        new THREE.MeshStandardMaterial({ map: tex.texture, roughness: 0.68, metalness: 0 }),
       );
+      plane.receiveShadow = true;
       placeStickerPlane(plane, sticker);
       mesh.add(plane);
       stickerPlanes.set(sticker.id, plane);
@@ -116,14 +118,17 @@ export function mat4FromMat3(r: Mat3): THREE.Matrix4 {
   );
 }
 
-/** redraw a sticker's texture from its current stroke list */
-export function redrawSticker(handles: CubeViewHandles, stickerId: number, strokes: readonly Stroke[]): void {
-  handles.stickerTextures.get(stickerId)?.redrawAll(strokes);
-}
-
-/** incrementally append one stroke to a sticker's texture (hot path) */
-export function appendStrokeToSticker(handles: CubeViewHandles, stickerId: number, stroke: Stroke): void {
-  handles.stickerTextures.get(stickerId)?.appendStroke(stroke);
+/**
+ * Push session tile content into the textures. Cheap: each texture no-ops
+ * unless its dataURL changed.
+ */
+export function reconcileTiles(
+  handles: CubeViewHandles,
+  tiles: ReadonlyMap<number, string | null>,
+): void {
+  for (const [stickerId, tex] of handles.stickerTextures) {
+    tex.setImage(tiles.get(stickerId) ?? null);
+  }
 }
 
 export function disposeCubeView(handles: CubeViewHandles): void {

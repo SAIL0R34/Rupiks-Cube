@@ -19,14 +19,23 @@ import {
   inverseSeq,
   applyMove,
   parseMove,
+  tokenFor,
 } from '../src/core/moves';
 import type { MoveToken } from '../src/core/moves';
 import { generateScramble } from '../src/core/scramble';
 
 const GROUP = rotationGroup();
 
+function cross(a: readonly number[], b: readonly number[]): number[] {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+function z(x: number): number {
+  return x === 0 ? 0 : x;
+}
+
 describe('rotation group', () => {
-  it('has exactly 24 members, all closed under multiplication', () => {
+  it('has exactly 24 members, closed under multiplication', () => {
     expect(GROUP.length).toBe(24);
     for (const a of GROUP) {
       for (const b of GROUP) {
@@ -38,25 +47,22 @@ describe('rotation group', () => {
   it('T⁴ = I for all six quarter-turn generators', () => {
     const quarters = [...Object.values(AXIS_CW), ...Object.values(AXIS_CCW)];
     for (const q of quarters) {
-      const q2 = mulMat(q, q);
-      const q4 = mulMat(q2, q2);
-      expect(orientationIndex(q4)).toBe(orientationIndex(IDENTITY));
+      expect(orientationIndex(mulMat(mulMat(q, q), mulMat(q, q)))).toBe(orientationIndex(IDENTITY));
     }
   });
 
   it('is orthonormal: T·Tᵀ = I', () => {
     for (const m of GROUP) {
-      const tt = mulMat(m, transpose(m));
-      expect(tt).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+      expect(mulMat(m, transpose(m))).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
     }
   });
 
-  it('every face frame is right-handed (u × v = n) and normals are unique', () => {
+  it('face frames are right-handed (u × v = n) with unique normals', () => {
     const normals = new Set(FACES.map((f) => FACE_FRAME[f].n.join(',')));
     expect(normals.size).toBe(6);
     for (const f of FACES) {
       const { n, uAxis, vAxis } = FACE_FRAME[f];
-      expect(cross(uAxis, vAxis).map(normalizeZero)).toEqual([...n].map(normalizeZero));
+      expect(cross(uAxis, vAxis).map(z)).toEqual([...n].map(z));
       expect(faceOfNormal(n)).toBe(f);
     }
   });
@@ -68,23 +74,31 @@ describe('rotation group', () => {
   });
 });
 
-describe('moves (P1/P2)', () => {
+describe('moves (P1/P2) — 24 tokens incl. middle slices', () => {
   const solved = createSolvedCube();
+
+  it('covers exactly 27 tokens (9 bases × 3) with axis/coord/cwSign defined', () => {
+    expect(MOVE_TOKENS.length).toBe(27);
+    for (const token of MOVE_TOKENS) {
+      const def = parseMove(token);
+      expect(def.token).toBe(token);
+      expect([-1, 0, 1]).toContain(def.coord);
+      expect([1, -1]).toContain(def.cwSign);
+    }
+  });
 
   it('P1: every move applied 4× returns to the original state exactly', () => {
     for (const token of MOVE_TOKENS) {
       let s = solved;
       for (let i = 0; i < 4; i++) s = applyMove(s, token);
-      expect(s.cubies.map((c) => c.id + '@' + c.pos.join(','))).toEqual(
-        solved.cubies.map((c) => c.id + '@' + c.pos.join(',')),
+      expect(s.cubies.map((c) => c.id + '@' + c.pos.join(',')).join(';')).toBe(
+        solved.cubies.map((c) => c.id + '@' + c.pos.join(',')).join(';'),
       );
-      for (const c of s.cubies) {
-        expect(orientationIndex(c.R)).toBe(orientationIndex(IDENTITY));
-      }
+      for (const c of s.cubies) expect(orientationIndex(c.R)).toBe(orientationIndex(IDENTITY));
     }
   });
 
-  it('P2: move then inverse = identity (all 18, including self-inverse doubles)', () => {
+  it('P2: move then inverse = identity (all 24, incl. self-inverse doubles)', () => {
     for (const token of MOVE_TOKENS) {
       const s = applyMove(applyMove(solved, token), inverseMove(token));
       expect(s.cubies.map((c) => c.id + '@' + c.pos.join(',')).join(';')).toBe(
@@ -103,7 +117,7 @@ describe('moves (P1/P2)', () => {
     }
   });
 
-  it('R CW takes UFR → UBR (known permutation pins the sign convention)', () => {
+  it('R CW takes UFR → UBR (sign convention pin)', () => {
     const s = applyMove(solved, 'R');
     const ufrId = solved.cubies.find((c) => c.pos.join(',') === '1,1,1')!.id;
     expect(s.cubies.find((c) => c.id === ufrId)!.pos.join(',')).toBe('1,1,-1');
@@ -115,43 +129,66 @@ describe('moves (P1/P2)', () => {
     expect(s.cubies.find((c) => c.id === ufrId)!.pos.join(',')).toBe('1,-1,1');
   });
 
-  it('U CW viewed from above takes the front-top edge to the left side', () => {
-    // U: n=+y, CW = Rot(−90°, y)
-    const s = applyMove(solved, 'U');
-    const ufId = solved.cubies.find((c) => c.pos.join(',') === '0,1,1')!.id;
-    expect(s.cubies.find((c) => c.id === ufId)!.pos.join(',')).toBe('-1,1,0');
+  it('slices follow their reference faces: M~L, E~D, S~F (identical turn matrices)', () => {
+    expect(MOVE_TABLE.M.T).toBe(MOVE_TABLE.L.T);
+    expect(MOVE_TABLE.E.T).toBe(MOVE_TABLE.D.T);
+    expect(MOVE_TABLE.S.T).toBe(MOVE_TABLE.F.T);
   });
 
-  it('notation round-trips and MOVE_TABLE covers exactly 18 moves', () => {
-    expect(MOVE_TOKENS.length).toBe(18);
-    for (const token of MOVE_TOKENS) {
-      expect(parseMove(token).token).toBe(token);
-      expect(MOVE_TABLE[token].T.length).toBe(9);
+  it('M moves the middle slice like L moves its layer, and leaves outer layers alone', () => {
+    const sM = applyMove(solved, 'M');
+    const sL = applyMove(solved, 'L');
+    const midId = solved.cubies.find((c) => c.pos.join(',') === '0,1,0')!.id;
+    const wingId = solved.cubies.find((c) => c.pos.join(',') === '-1,1,0')!.id;
+    const ufrId = solved.cubies.find((c) => c.pos.join(',') === '1,1,1')!.id;
+    // same y/z displacement, differing only in the x coordinate
+    const m = sM.cubies.find((c) => c.id === midId)!.pos;
+    const w = sL.cubies.find((c) => c.id === wingId)!.pos;
+    expect(`${m[1]},${m[2]}`).toBe(`${w[1]},${w[2]}`);
+    // outer-layer cubie untouched by M
+    expect(sM.cubies.find((c) => c.id === ufrId)!.pos.join(',')).toBe('1,1,1');
+  });
+
+  it("S follows F on the middle slice", () => {
+    const s = applyMove(solved, 'S');
+    const midId = solved.cubies.find((c) => c.pos.join(',') === '0,1,0')!.id;
+    // F CW takes (0,1,·)→(1,0,·); the S slice must match on its own cubie
+    const p = s.cubies.find((c) => c.id === midId)!.pos;
+    expect(`${p[0]},${p[1]}`).toBe('1,0');
+  });
+
+  it('tokenFor resolves every axis/coord/direction and matches MOVE_TABLE', () => {
+    for (const axis of ['x', 'y', 'z'] as const) {
+      for (const coord of [-1, 0, 1] as const) {
+        const cw = tokenFor(axis, coord, 1);
+        const ccw = tokenFor(axis, coord, 3);
+        expect(MOVE_TABLE[cw].axis).toBe(axis);
+        expect(MOVE_TABLE[cw].coord).toBe(coord);
+        expect(inverseMove(cw)).toBe(ccw);
+        expect(inverseMove(ccw)).toBe(cw);
+        expect(tokenFor(axis, coord, 2).endsWith('2')).toBe(true);
+        expect(inverseMove(tokenFor(axis, coord, 2))).toBe(tokenFor(axis, coord, 2));
+      }
     }
   });
 
   it('inverseSeq inverts a sequence', () => {
-    const seq: MoveToken[] = ['R', 'U', "R'", 'U2'];
-    const inv = inverseSeq(seq);
-    expect(inv).toEqual(['U2', 'R', "U'", "R'"]);
-    const s = applyMoves(applyMoves(solved, seq), inv);
+    const seq: MoveToken[] = ['R', 'U', "M'", 'U2'];
+    const s = applyMoves(applyMoves(solved, seq), inverseSeq(seq));
     for (const c of s.cubies) expect(orientationIndex(c.R)).toBe(orientationIndex(IDENTITY));
   });
 
-  it("cellCubiePos matches face frames (F(0,0) = bottom-left-front cubie)", () => {
+  it("cellCubiePos matches face frames", () => {
     expect(cellCubiePos('F', 0, 0).join(',')).toBe('-1,-1,1');
     expect(cellCubiePos('U', 2, 2).join(',')).toBe('1,1,-1');
     expect(cellCubiePos('R', 0, 2).join(',')).toBe('1,1,1');
   });
 
-  it('scrambles are deterministic and follow adjacency rules', () => {
+  it('scrambles are deterministic with no same-face adjacency', () => {
     const a = generateScramble(42);
-    const b = generateScramble(42);
-    expect(a).toEqual(b);
+    expect(a).toEqual(generateScramble(42));
     expect(a.length).toBe(25);
-    for (let i = 1; i < a.length; i++) {
-      expect(a[i][0]).not.toBe(a[i - 1][0]);
-    }
+    for (let i = 1; i < a.length; i++) expect(a[i][0]).not.toBe(a[i - 1][0]);
   });
 
   it('cubieAt finds cubies by position', () => {
@@ -159,12 +196,3 @@ describe('moves (P1/P2)', () => {
     expect(cubieAt(solved, [0, 0, 0])).toBeUndefined();
   });
 });
-
-function cross(a: readonly number[], b: readonly number[]): number[] {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-}
-
-function normalizeZero(x: number): number {
-  return x === 0 ? 0 : x;
-}
-

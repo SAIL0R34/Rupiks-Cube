@@ -1,35 +1,22 @@
 /**
- * Unfolded cross-net export — SVG (true vectors) and PNG.
+ * Unfolded cross-net export — PNG and SVG, composed from the 54 CURRENT tile
+ * images so scrambled states export exactly as distributed.
  *
- * Net layout (face-space (u,v) ∈ [0,3]² per face, 1-unit gutters):
- *
- *          U
- *      L   F   R   B
- *          D
- *
- * Each face's strokes are converted from tile-local back to face coords via
- * tileToFace, so the net shows the artwork exactly as currently distributed
- * over the cube (scrambles included).
+ * Net layout:      U
+ *               L  F  R  B
+ *                  D
  */
 
 import type { Session } from '../core/history';
 import type { Face } from '../core/faces';
-import { FACES } from '../core/faces';
-import { tileToFace } from '../core/transform';
+import { faceCellAffines } from '../imaging/faceBlit';
+import { decodeDataUrl } from '../imaging/compose';
 import { downloadBlob } from '../utils/download';
 
-const FACE = 300; // px per face unit-cell ×3 → face is 3 cells
-const CELL = FACE;
-const GUTTER = 24;
+const CELL = 256;
+const GUTTER = 26;
 
-interface NetSlot {
-  face: Face;
-  x: number; // net origin px
-  y: number;
-}
-
-/** cross layout: U on top; L F R B across; D below (centered on F) */
-function netSlots(): NetSlot[] {
+const SLOTS: Array<{ face: Face; x: number; y: number }> = (() => {
   const o = CELL + GUTTER;
   return [
     { face: 'U', x: o, y: 0 },
@@ -39,114 +26,97 @@ function netSlots(): NetSlot[] {
     { face: 'B', x: 3 * o, y: o },
     { face: 'D', x: o, y: 2 * o },
   ];
-}
+})();
 
 function netSize(): { w: number; h: number } {
   const o = CELL + GUTTER;
-  return { w: 4 * o - GUTTER + 8, h: 3 * o - GUTTER + 8 };
+  return { w: 4 * o - GUTTER + 20, h: 3 * o - GUTTER + 20 };
 }
 
-/** collect the strokes of a face, in face coords */
-function faceStrokes(sess: Session, face: Face): Array<{
-  pts: number[];
-  weight: number;
-  travel: boolean;
-  closed?: boolean;
-}> {
-  const out: Array<{ pts: number[]; weight: number; travel: boolean; closed?: boolean }> = [];
-  for (const cubie of sess.cube.cubies) {
-    for (const sticker of cubie.stickers) {
-      for (const st of sticker.strokes) {
-        const pts: number[] = [];
-        for (let i = 0; i < st.pts.length; i += 2) {
-          const p = tileToFace(cubie, sticker, st.pts[i], st.pts[i + 1]);
-          if (p.face !== face) continue; // sticker rotated away; shouldn't happen mid-stroke
-          pts.push(p.u, p.v);
-        }
-        if (pts.length >= 4) {
-          out.push({ pts, weight: st.weight, travel: st.travel, ...(st.closed ? { closed: true } : {}) });
-        }
-      }
-    }
+/** compose one face (3×3 current tiles) into a canvas → dataURL */
+async function faceDataUrl(sess: Session, face: Face): Promise<string> {
+  const canvas = document.createElement('canvas');
+  canvas.width = CELL * 3;
+  canvas.height = CELL * 3;
+  const ctx = canvas.getContext('2d')!;
+  const affines = faceCellAffines(sess.cube, face);
+  const imgs = await Promise.all(
+    affines.map((a) => {
+      const url = sess.tiles.get(a.stickerId);
+      return url ? decodeDataUrl(url) : Promise.resolve(null);
+    }),
+  );
+  affines.forEach((a, k) => {
+    const img = imgs[k];
+    const dx = a.i * CELL;
+    const dy = (2 - a.j) * CELL; // face v up → canvas y down
+    ctx.fillStyle = '#efece4';
+    ctx.fillRect(dx, dy, CELL, CELL);
+    if (!img) return;
+    // tile-space px of the face-cell corners (quad maps cell → tile)
+    const px = (q: { s: number; t: number }) => [q.s * CELL, (1 - q.t) * CELL] as const;
+    const [x0, y0] = px(a.quad[0]);
+    const [x1, y1] = px(a.quad[1]);
+    const [x3, y3] = px(a.quad[3]);
+    // tile-px edge vectors of the cell's x/y edges
+    const e0x = x1 - x0;
+    const e0y = y1 - y0;
+    const e1x = x3 - x0;
+    const e1y = y3 - y0;
+    const det = e0x * e1y - e0y * e1x;
+    if (Math.abs(det) < 1e-6) return;
+    // affine tile→cell: [CELL,0; 0,CELL] · [e0 e1]⁻¹
+    const ia = (CELL * e1y) / det;
+    const ib = (-CELL * e0y) / det;
+    const ic = (-CELL * e1x) / det;
+    const id = (CELL * e0x) / det;
+    ctx.save();
+    ctx.translate(dx, dy);
+    ctx.transform(ia, ib, ic, id, -x0, -y0);
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+  });
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
+async function faceUrls(sess: Session): Promise<Record<Face, string>> {
+  const out = {} as Record<Face, string>;
+  for (const slot of SLOTS) {
+    // eslint-disable-next-line no-await-in-loop
+    out[slot.face] = await faceDataUrl(sess, slot.face);
   }
   return out;
 }
 
-export function buildNetSVG(sess: Session): string {
+export async function downloadNetPNG(sess: Session): Promise<void> {
+  const urls = await faceUrls(sess);
   const { w, h } = netSize();
-  const parts: string[] = [];
-  parts.push(
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#f1efe9';
+  ctx.fillRect(0, 0, w, h);
+  const imgs = await Promise.all(SLOTS.map((s) => decodeDataUrl(urls[s.face])));
+  SLOTS.forEach((s, k) => ctx.drawImage(imgs[k], s.x + 10, s.y + 10));
+  canvas.toBlob((b) => {
+    if (b) downloadBlob(b, 'twistdraw-net.png');
+  }, 'image/png');
+}
+
+export async function downloadNetSVG(sess: Session): Promise<void> {
+  const urls = await faceUrls(sess);
+  const { w, h } = netSize();
+  const parts: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`,
-    `<rect width="${w}" height="${h}" fill="#f4f1ea"/>`,
-  );
-  for (const slot of netSlots()) {
-    // tile grid
-    for (let i = 0; i <= 3; i++) {
-      parts.push(
-        `<line x1="${slot.x + i * CELL}" y1="${slot.y}" x2="${slot.x + i * CELL}" y2="${slot.y + 3 * CELL}" stroke="#d8d2c4" stroke-width="1"/>`,
-        `<line x1="${slot.x}" y1="${slot.y + i * CELL}" x2="${slot.x + 3 * CELL}" y2="${slot.y + i * CELL}" stroke="#d8d2c4" stroke-width="1"/>`,
-      );
-    }
+    `<rect width="${w}" height="${h}" fill="#f1efe9"/>`,
+  ];
+  for (const s of SLOTS) {
     parts.push(
-      `<rect x="${slot.x}" y="${slot.y}" width="${3 * CELL}" height="${3 * CELL}" fill="none" stroke="#b9b3a6" stroke-width="2" rx="4"/>`,
+      `<image x="${s.x + 10}" y="${s.y + 10}" width="${CELL * 3}" height="${CELL * 3}" href="${urls[s.face]}"/>`,
+      `<rect x="${s.x + 9}" y="${s.y + 9}" width="${CELL * 3 + 2}" height="${CELL * 3 + 2}" fill="none" stroke="#b9b3a6" stroke-width="1.5" rx="6"/>`,
     );
-    parts.push(
-      `<text x="${slot.x + 8}" y="${slot.y + 20}" font-family="monospace" font-size="16" fill="#8a8478">${slot.face}</text>`,
-    );
-    // strokes (v === 0 at top → y = slot.y + u·CELL, x = slot.x + u·CELL)
-    for (const s of faceStrokes(sess, slot.face)) {
-      const alpha = s.travel ? 0.28 : 0.55 + 0.4 * Math.min(1, Math.max(0, s.weight));
-      const widthPx = s.travel ? 1.2 : 1.6 + 1.6 * Math.min(1, Math.max(0, s.weight));
-      const d = s.pts
-        .map((_, i) => {
-          if (i % 2 === 1) return '';
-          const x = slot.x + s.pts[i] * CELL;
-          const y = slot.y + (3 - s.pts[i + 1]) * CELL; // v up → y down
-          return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-        })
-        .filter(Boolean)
-        .join(' ');
-      parts.push(
-        `<path d="${d} ${s.closed ? 'Z' : ''}" fill="none" stroke="rgba(32,30,28,${alpha.toFixed(2)})" stroke-width="${widthPx.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-      );
-    }
   }
   parts.push('</svg>');
-  return parts.join('\n');
-}
-
-export function buildNetPNG(sess: Session): Promise<Blob> {
-  const svg = buildNetSVG(sess);
-  const { w, h } = netSize();
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encode failed'))), 'image/png');
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('SVG rasterization failed'));
-    };
-    img.src = url;
-  });
-}
-
-export function downloadNetSVG(sess: Session): void {
-  downloadBlob(new Blob([buildNetSVG(sess)], { type: 'image/svg+xml' }), 'twistdraw-net.svg');
-}
-
-export async function downloadNetPNG(sess: Session): Promise<void> {
-  downloadBlob(await buildNetPNG(sess), 'twistdraw-net.png');
-}
-
-export function faceList(): readonly Face[] {
-  return FACES;
+  downloadBlob(new Blob([parts.join('\n')], { type: 'image/svg+xml' }), 'twistdraw-net.svg');
 }

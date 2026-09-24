@@ -1,166 +1,114 @@
 /**
- * ControlPanel — buttons for everything the knobs don't cover: upload,
- * complexity, scramble/solve, undo/redo, modes, clears, save/load/export.
+ * ControlPanel — the simplified primary bar: scramble, solve, undo/redo, and
+ * a "more" drawer for the rare stuff (repaint, files, exports, new session).
  */
 
-import { useRef } from 'react';
-import { useCubeStore } from '../store/useCubeStore';
-import { uploadAndSketch } from '../plotting/uploadFlow';
-import type { Complexity } from '../image-processing/types';
-import { emit } from '../utils/bus';
-import { abortPlot } from '../plotting/PlotSession';
+import { useRef, useState } from 'react';
+import { useCubeStore, hasAllImages } from '../store/useCubeStore';
+import { FACES } from '../core/faces';
+import type { Face } from '../core/faces';
 import { serializeSave, deserializeSave } from '../core/serialize';
 import { downloadJSON } from '../utils/download';
-import { downloadNetSVG, downloadNetPNG } from '../net/netExport';
+import { downloadNetPNG, downloadNetSVG } from '../net/netExport';
 import { downloadView } from '../three/viewExport';
+import { clearStoredSession } from '../store/session';
 
-const COMPLEXITIES: Complexity[] = ['minimal', 'standard', 'obsessed'];
-
-export function ControlPanel(): JSX.Element {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const loadRef = useRef<HTMLInputElement>(null);
+export function ControlPanel(): JSX.Element | null {
   const scrambleNow = useCubeStore((s) => s.scrambleNow);
   const solveNow = useCubeStore((s) => s.solveNow);
   const undo = useCubeStore((s) => s.undo);
   const redo = useCubeStore((s) => s.redo);
-  const clearActiveFace = useCubeStore((s) => s.clearActiveFace);
-  const clearAllStrokes = useCubeStore((s) => s.clearAllStrokes);
-  const setUI = useCubeStore((s) => s.setUI);
-  const mode = useCubeStore((s) => s.mode);
-  const penDown = useCubeStore((s) => s.penDown);
-  const togglePen = useCubeStore((s) => s.togglePen);
-  const cycleActiveFace = useCubeStore((s) => s.cycleActiveFace);
-  const activeFace = useCubeStore((s) => s.activeFace);
+  const setRepaintFace = useCubeStore((s) => s.setRepaintFace);
+  const newSession = useCubeStore((s) => s.newSession);
+  const started = useCubeStore((s) => hasAllImages(s.session));
   const busy = useCubeStore((s) => s.busy);
-  const plotting = useCubeStore((s) => s.plotting);
-  const complexity = useCubeStore((s) => s.complexity);
+  const [open, setOpen] = useState(false);
+  const loadRef = useRef<HTMLInputElement>(null);
+
+  if (!started) return null; // onboarding owns the screen
+
+  const saveFile = () => {
+    downloadJSON(serializeSave(useCubeStore.getState().session), 'twistdraw-cube.json');
+  };
+
+  const loadFile = async (file: File) => {
+    try {
+      const session = deserializeSave(JSON.parse(await file.text()));
+      useCubeStore.getState().hydrate({
+        session,
+        undoStack: [],
+        redoStack: [],
+      });
+    } catch (err) {
+      useCubeStore.setState({
+        banner: { text: `Load failed: ${err instanceof Error ? err.message : String(err)}`, at: Date.now() },
+      });
+    }
+  };
 
   return (
     <div className="control-panel">
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            void uploadAndSketch(file, {
-              mode: useCubeStore.getState().complexity,
-              fit: 'contain',
-              clearFaceFirst: true,
-            });
-          }
-          e.target.value = '';
-        }}
-      />
-      <div className="panel-group">
-        <button
-          className="primary"
-          onClick={() =>
-            fileRef.current &&
-            fileRef.current.click()
-          }
-          disabled={busy === 'plotting'}
-        >
-          upload & etch
+      <div className="primary-bar">
+        <button className="cta" onClick={() => scrambleNow()} disabled={busy !== 'idle'}>
+          scramble
         </button>
-        {plotting.status !== 'idle' && <button onClick={() => abortPlot()}>stop</button>}
-        <div className="seg">
-          {COMPLEXITIES.map((c) => (
-            <button
-              key={c}
-              className={`seg-btn ${complexity === c ? 'on' : ''}`}
-              onClick={() => setUI({ complexity: c })}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="panel-group">
-        <button onClick={() => scrambleNow()}>scramble</button>
-        <button className="accent" onClick={() => solveNow()}>
+        <button className="good" onClick={() => solveNow()} disabled={busy !== 'idle'}>
           solve
         </button>
-        <button onClick={() => undo()}>undo</button>
-        <button onClick={() => redo()}>redo</button>
-      </div>
-
-      <div className="panel-group">
-        <button
-          className={mode === 'pen' ? 'on' : ''}
-          onClick={() => setUI({ mode: mode === 'pen' ? 'idle' : 'pen', penDown: false })}
-        >
-          manual mode
+        <button className="ghost" onClick={() => undo()} aria-label="undo" disabled={busy !== 'idle'}>
+          ↩
         </button>
-        <button className={penDown ? 'on' : ''} onClick={() => togglePen()} disabled={mode !== 'pen'}>
-          {penDown ? 'pen up' : 'pen down'}
+        <button className="ghost" onClick={() => redo()} aria-label="redo" disabled={busy !== 'idle'}>
+          ↪
         </button>
-        <button
-          className={mode === 'erase' ? 'on' : ''}
-          onClick={() => setUI({ mode: mode === 'erase' ? 'idle' : 'erase', penDown: false })}
-        >
-          erase
+        <button className="ghost" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          more {open ? '▴' : '▾'}
         </button>
       </div>
-
-      <div className="panel-group">
-        <button onClick={() => cycleActiveFace(1)}>draw face: {activeFace}</button>
-        <button onClick={() => clearActiveFace()}>clear face</button>
-        <button onClick={() => clearAllStrokes()}>shake clean</button>
-      </div>
-
-      <div className="panel-group">
-        <button onClick={() => saveFile()}>save file</button>
-        <button onClick={() => loadRef.current?.click()}>load file</button>
-        <input
-          ref={loadRef}
-          type="file"
-          accept="application/json,.json"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void loadFile(file);
-            e.target.value = '';
-          }}
-        />
-        <button onClick={() => downloadNetSVG(useCubeStore.getState().session)}>net svg</button>
-        <button onClick={() => void downloadNetPNG(useCubeStore.getState().session)}>net png</button>
-        <button onClick={() => void downloadView()}>view png</button>
-      </div>
+      {open && (
+        <div className="drawer">
+          <div className="drawer-row">
+            <span className="drawer-label">face picture</span>
+            {FACES.map((f) => (
+              <button key={f} className="ghost face-btn" onClick={() => setRepaintFace(f as Face)}>
+                {f}
+              </button>
+            ))}
+          </div>
+          <div className="drawer-row">
+            <button className="ghost" onClick={() => saveFile()}>save file</button>
+            <button className="ghost" onClick={() => loadRef.current?.click()}>load file</button>
+            <button className="ghost" onClick={() => downloadNetPNG(useCubeStore.getState().session)}>net png</button>
+            <button className="ghost" onClick={() => downloadNetSVG(useCubeStore.getState().session)}>net svg</button>
+            <button className="ghost" onClick={() => void downloadView()}>view png</button>
+          </div>
+          <div className="drawer-row">
+            <button
+              className="ghost danger"
+              onClick={() => {
+                if (window.confirm('Start over? The current cube and pictures are discarded.')) {
+                  clearStoredSession();
+                  newSession();
+                  setOpen(false);
+                }
+              }}
+            >
+              start over
+            </button>
+          </div>
+          <input
+            ref={loadRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void loadFile(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      )}
     </div>
   );
-}
-
-function saveFile(): void {
-  const s = useCubeStore.getState();
-  const wire = serializeSave(s.session);
-  downloadJSON(wire, 'twistdraw-cube.json');
-}
-
-async function loadFile(file: File): Promise<void> {
-  try {
-    const text = await file.text();
-    const session = deserializeSave(JSON.parse(text));
-    useCubeStore.getState().hydrate({
-      session,
-      undoStack: [],
-      redoStack: [],
-      ui: { plotting: { status: 'idle', stage: '', progress: 0 } },
-    });
-    useCubeStore.setState({
-      banner: { text: 'Artwork loaded', at: Date.now() },
-      pendingPlotResume: null,
-    });
-  } catch (err) {
-    useCubeStore.setState({
-      banner: { text: `Load failed: ${err instanceof Error ? err.message : String(err)}`, at: Date.now() },
-    });
-  }
-}
-
-export function triggerUpload(): void {
-  emit('upload-request', {});
 }

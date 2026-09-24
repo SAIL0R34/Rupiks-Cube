@@ -1,23 +1,16 @@
-/** HelpOverlay — the keymap cheatsheet (? or the help button) */
+/** HelpOverlay — the cheatsheet (? or the help button) */
 
 import { useEffect, useState } from 'react';
 
 const KEYS: Array<[string, string]> = [
-  ['1–6 / [ ]', 'select turn face (K1)'],
-  ['space / ⇧space', 'turn face CW / CCW (K2)'],
-  ['X', 'double turn'],
-  ['arrows', 'move cursor (K3/K4) — ⇧ coarse, ⌥ fine'],
-  ['M', 'manual (experienced) mode'],
-  ['D', 'pen down / up (in manual mode)'],
-  ['E', 'erase mode'],
-  ['A / ⇧A', 'cycle drawing face'],
-  ['L', 'look at drawing face'],
-  ['U', 'upload an image to etch'],
-  ['Esc', 'stop the etch (partial art is kept)'],
-  ['+ / −', 'etch speed'],
-  ['C / 0', 'clear face / shake the cube clean'],
+  ['drag a row / column', 'twist that layer — middle rows work too'],
+  ['drag empty space', 'orbit the cube (wheel zooms)'],
+  ['U D L R F B', 'twist that face (+⇧ for the other way)'],
+  ['M E S', 'twist the middle slices'],
+  ['Space', 'scramble'],
+  ['Enter', 'solve back to your pictures'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
-  ['drag', 'orbit the cube'],
+  ['more ▾', 'swap a face picture, save/load, export'],
 ];
 
 export function HelpOverlay(): JSX.Element {
@@ -45,9 +38,8 @@ export function HelpOverlay(): JSX.Element {
           <div className="help-card" onClick={(e) => e.stopPropagation()}>
             <h2>TwistDraw Cube</h2>
             <p>
-              Upload a photo — the machine etches it onto a face as one continuous line.
-              Scramble the cube and the artwork fragments across the tiles; solve to
-              reassemble it.
+              Six of your pictures, one on each face. Twist the layers and the images
+              shatter across the cube — solve it to put them back together.
             </p>
             <table>
               <tbody>

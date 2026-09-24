@@ -1,69 +1,40 @@
-/**
- * StatusBar — plotting progress (worker stages → etch animation), session
- * note, the etch speed control, and the resume-or-keep prompt for a parked
- * mid-flight plot.
- */
+/** StatusBar — banner, solve progress, restored note, first-time hint */
 
-import { useCubeStore } from '../store/useCubeStore';
-import { resumePendingPlot, discardPendingPlot } from '../store/session';
+import { useEffect } from 'react';
+import { useCubeStore, hasAllImages } from '../store/useCubeStore';
+import { matchesReference } from '../core/history';
 
-export function StatusBar(): JSX.Element {
-  const plotting = useCubeStore((s) => s.plotting);
-  const speed = useCubeStore((s) => s.speed);
-  const setUI = useCubeStore((s) => s.setUI);
-  const sessionRestored = useCubeStore((s) => s.sessionRestored);
-  const pendingPlotResume = useCubeStore((s) => s.pendingPlotResume);
+export function StatusBar(): JSX.Element | null {
+  const banner = useCubeStore((s) => s.banner);
+  const clearBanner = useCubeStore((s) => s.clearBanner);
   const busy = useCubeStore((s) => s.busy);
+  const sessionRestored = useCubeStore((s) => s.sessionRestored);
+  const solving = useCubeStore((s) => busyFromStore(s));
+  const started = useCubeStore((s) => hasAllImages(s.session));
+  const solved = useCubeStore((s) =>
+    s.session.reference ? matchesReference(s.session, s.session.reference) : false,
+  );
 
-  const active = plotting.status !== 'idle';
-  const hasPendingPlot = pendingPlotResume != null && busy === 'idle';
-  const solving =
-    busy === 'turning' && useCubeStore.getState().turnBatches[0]?.label === 'solve';
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => clearBanner(), 3200);
+    return () => clearTimeout(t);
+  }, [banner, clearBanner]);
+
+  if (!started) return null;
 
   return (
     <div className="status-bar">
+      {banner && <div className="banner" key={banner.at}>{banner.text}</div>}
       {solving && (
-        <div className="plot-stage">
-          solving… {useCubeStore.getState().turnBatches[0].tokens.length} turns to go
-        </div>
+        <div className="solve-note">solving… {useCubeStore.getState().turnBatches[0]?.tokens.length ?? 0} turns left</div>
       )}
-      {hasPendingPlot && (
-        <div className="resume-prompt">
-          <div className="resume-note">unfinished etch found</div>
-          <div className="resume-row">
-            <button className="accent" onClick={() => resumePendingPlot()}>
-              resume plotting
-            </button>
-            <button onClick={() => discardPendingPlot()}>keep partial</button>
-          </div>
-        </div>
-      )}
-      {active && (
-        <div className="plot-progress">
-          <div className="plot-stage">
-            {plotting.status === 'processing' ? plotting.stage || 'working…' : 'etching…'}
-          </div>
-          <div className="progress-track">
-            <div
-              className="progress-fill"
-              style={{ width: `${Math.round((plotting.status === 'processing' ? plotting.progress : plotting.progress) * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-      <div className="speed-row">
-        <span className="speed-label">speed</span>
-        {[1, 2, 4, 8].map((v) => (
-          <button
-            key={v}
-            className={`speed-btn ${speed === v ? 'on' : ''}`}
-            onClick={() => setUI({ speed: v })}
-          >
-            {v}×
-          </button>
-        ))}
-      </div>
-      {sessionRestored && <div className="restored-note">session restored</div>}
+      {sessionRestored && !solving && <div className="restored-note">picked up where you left off</div>}
+      {!sessionRestored && !solved && <div className="hint">drag a row or column to twist · space to scramble</div>}
     </div>
   );
+}
+
+function busyFromStore(s: { busy: 'idle' | 'turning'; turnBatches: { label: string }[] }): boolean {
+  return s.busy === 'turning' && s.turnBatches[0]?.label === 'solve';
 }
