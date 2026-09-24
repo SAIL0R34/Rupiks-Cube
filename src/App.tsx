@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { CubeCanvas } from './ui/CubeCanvas';
 import { useKeyboard } from './ui/useKeyboard';
+import { KnobDeck } from './ui/KnobDeck';
+import { ControlPanel } from './ui/ControlPanel';
+import { StatusBar } from './ui/StatusBar';
+import { HelpOverlay } from './ui/HelpOverlay';
 import { useCubeStore } from './store/useCubeStore';
 import { matchesReference } from './core/history';
 import { uploadAndSketch } from './plotting/uploadFlow';
@@ -68,7 +72,13 @@ export default function App(): JSX.Element {
           {pending > 0 && <span className="chip">{pending} from reference</span>}
           {solved && <span className="chip solved">SOLVED</span>}
         </div>
+        <div className="bottom-bar">
+          <StatusBar />
+          <KnobDeck />
+          <ControlPanel />
+        </div>
       </div>
+      <HelpOverlay />
     </div>
   );
 }

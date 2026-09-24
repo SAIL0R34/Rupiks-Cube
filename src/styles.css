@@ -95,3 +95,276 @@ body,
     transform: translateY(0);
   }
 }
+
+/* --- bottom bar: status, knobs, controls --- */
+
+.bottom-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  pointer-events: auto;
+}
+
+.status-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 190px;
+}
+
+.plot-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plot-stage {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #b9b3a6;
+  text-transform: lowercase;
+}
+
+.progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(232, 228, 220, 0.12);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d8483b, #e8974a);
+  transition: width 120ms linear;
+}
+
+.speed-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.speed-label {
+  font-size: 11px;
+  color: #b9b3a6;
+  margin-right: 3px;
+}
+
+.speed-btn,
+.control-panel button,
+.help-btn {
+  background: rgba(24, 24, 28, 0.85);
+  color: #e8e4dc;
+  border: 1px solid rgba(232, 228, 220, 0.18);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+
+.speed-btn:hover,
+.control-panel button:hover,
+.help-btn:hover {
+  border-color: rgba(232, 228, 220, 0.45);
+}
+
+.speed-btn.on,
+.control-panel button.on,
+.seg-btn.on {
+  border-color: rgba(216, 72, 59, 0.8);
+  background: rgba(216, 72, 59, 0.16);
+}
+
+.restored-note {
+  font-size: 11px;
+  color: #9df0bd;
+}
+
+/* knobs */
+
+.knob-deck {
+  display: flex;
+  gap: 14px;
+  background: rgba(24, 24, 28, 0.72);
+  border: 1px solid rgba(232, 228, 220, 0.14);
+  border-radius: 14px;
+  padding: 14px 18px 10px;
+  backdrop-filter: blur(6px);
+}
+
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  touch-action: none;
+}
+
+.knob svg {
+  cursor: grab;
+  outline: none;
+}
+
+.knob svg:active {
+  cursor: grabbing;
+}
+
+.knob.disabled {
+  opacity: 0.45;
+}
+
+.knob.flashing .knob-body {
+  stroke: #d8483b;
+  stroke-width: 3;
+}
+
+.knob-halo {
+  fill: rgba(232, 228, 220, 0.04);
+}
+
+.knob-body {
+  fill: #232329;
+  stroke: rgba(232, 228, 220, 0.25);
+  stroke-width: 1.5;
+}
+
+.knob-tick {
+  stroke: rgba(232, 228, 220, 0.3);
+  stroke-width: 1.5;
+}
+
+.knob-tick.active {
+  stroke: #e8974a;
+  stroke-width: 2.5;
+}
+
+.knob-stem {
+  stroke: #e8e4dc;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.knob-hub {
+  fill: #e8e4dc;
+}
+
+.knob-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #b9b3a6;
+}
+
+.knob-value {
+  font-size: 13px;
+  color: #e8974a;
+}
+
+/* control panel */
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.panel-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.control-panel .primary {
+  border-color: rgba(94, 158, 255, 0.6);
+  background: rgba(94, 158, 255, 0.14);
+}
+
+.control-panel .accent {
+  border-color: rgba(96, 220, 140, 0.6);
+  background: rgba(96, 220, 140, 0.12);
+}
+
+.seg {
+  display: flex;
+  margin-left: 6px;
+}
+
+.seg-btn {
+  border-radius: 0;
+}
+
+.seg-btn:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.seg-btn:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+/* help */
+
+.help-btn {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  pointer-events: auto;
+}
+
+.help-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 12, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.help-card {
+  background: #1a1a1f;
+  border: 1px solid rgba(232, 228, 220, 0.2);
+  border-radius: 12px;
+  padding: 26px 34px;
+  max-width: 480px;
+}
+
+.help-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
+.help-card p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c9c3b6;
+}
+
+.help-card table {
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+.help-card td {
+  padding: 3px 12px 3px 0;
+  color: #c9c3b6;
+}
+
+.help-card td.key {
+  color: #e8974a;
+  white-space: nowrap;
+}
+
+.hint {
+  margin-top: 14px;
+  font-size: 11px !important;
+  opacity: 0.6;
+}

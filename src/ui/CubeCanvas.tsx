@@ -38,6 +38,17 @@ export function CubeCanvas(): JSX.Element {
       tickPlot(dt, handles);
       const s = useCubeStore.getState();
       cursor.update(s.activeFace, s.cursor.u, s.cursor.v, s.cursor.visible);
+      // active-face frame follows the drawing face; visible when cursor is
+      const frame = FACE_FRAME[s.activeFace];
+      const n = frame.n;
+      highlight.position.set(n[0] * 1.62, n[1] * 1.62, n[2] * 1.62);
+      const uA = new THREE.Vector3(frame.uAxis[0], frame.uAxis[1], frame.uAxis[2]);
+      const vA = new THREE.Vector3(frame.vAxis[0], frame.vAxis[1], frame.vAxis[2]);
+      const nV = new THREE.Vector3(n[0], n[1], n[2]);
+      highlight.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(uA, vA, nV));
+      const mat = highlight.material as THREE.MeshBasicMaterial;
+      const pulse = 0.22 + 0.1 * Math.sin(performance.now() / 300);
+      mat.opacity = s.cursor.visible ? pulse : 0;
     });
 
     // dev orientation markers
@@ -46,16 +57,35 @@ export function CubeCanvas(): JSX.Element {
     }
 
     // re-derive the scene whenever core state changes (commits, undo, hydrate)
+    const strokeSigs = new Map<number, string>();
+    const reconcileStrokes = (cube: import('../core/cubeState').CubeState) => {
+      for (const cubie of cube.cubies) {
+        for (const sticker of cubie.stickers) {
+          const sig = `${sticker.strokes.length}:${sticker.strokes[sticker.strokes.length - 1]?.id ?? -1}`;
+          if (strokeSigs.get(sticker.id) !== sig) {
+            strokeSigs.set(sticker.id, sig);
+            handles.stickerTextures.get(sticker.id)?.redrawAll(sticker.strokes);
+          }
+        }
+      }
+    };
     const unsub = useCubeStore.subscribe((state, prev) => {
       if (state.version !== prev.version) {
         syncScene(handles, state.session.cube);
+        reconcileStrokes(state.session.cube);
       }
     });
 
-    // face-highlight frame for the active drawing face
+    // active drawing-face highlight: a thin frame floating just off the face
     const highlight = new THREE.Mesh(
-      new THREE.BoxGeometry(3.06, 3.06, 3.06),
-      new THREE.MeshBasicMaterial({ color: 0xd8483b, wireframe: true, transparent: true, opacity: 0.0 }),
+      new THREE.PlaneGeometry(3.14, 3.14),
+      new THREE.MeshBasicMaterial({
+        color: 0xd8483b,
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide,
+        wireframe: true,
+      }),
     );
     scene.scene.add(highlight);
 

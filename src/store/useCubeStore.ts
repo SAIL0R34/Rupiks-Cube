@@ -67,6 +67,7 @@ interface CubeStore {
   penDown: boolean;
   cursor: { u: number; v: number; visible: boolean };
   speed: number; // 1..8
+  complexity: 'minimal' | 'standard' | 'obsessed';
   plotting: PlottingStatus;
   banner: { text: string; at: number } | null;
   knobFlash: { which: 'turn'; at: number } | null;
@@ -109,6 +110,7 @@ interface CubeStore {
     mode: Mode;
     penDown: boolean;
     speed: number;
+    complexity: 'minimal' | 'standard' | 'obsessed';
     cursor: { u: number; v: number; visible: boolean };
     banner: { text: string; at: number } | null;
     plotting: PlottingStatus;
@@ -179,6 +181,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
   penDown: false,
   cursor: { u: 1.5, v: 1.5, visible: false },
   speed: 2,
+  complexity: 'standard',
   plotting: { status: 'idle', stage: '', progress: 0 },
   banner: null,
   knobFlash: null,
@@ -449,6 +452,9 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
         // notify scene (subscription via version)
         set((st) => ({ version: st.version + 1 }));
       }
+    } else if (s.mode === 'erase') {
+      // erase any strokes the cursor sweeps over
+      get().eraseNear(s.activeFace, cu, cv, 0.16);
     }
     set({ cursor: { u: cu, v: cv, visible: true } });
   },
