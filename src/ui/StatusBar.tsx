@@ -1,20 +1,36 @@
 /**
  * StatusBar — plotting progress (worker stages → etch animation), session
- * note, and the etch speed control.
+ * note, the etch speed control, and the resume-or-keep prompt for a parked
+ * mid-flight plot.
  */
 
 import { useCubeStore } from '../store/useCubeStore';
+import { resumePendingPlot, discardPendingPlot } from '../store/session';
 
 export function StatusBar(): JSX.Element {
   const plotting = useCubeStore((s) => s.plotting);
   const speed = useCubeStore((s) => s.speed);
   const setUI = useCubeStore((s) => s.setUI);
   const sessionRestored = useCubeStore((s) => s.sessionRestored);
+  const pendingPlotResume = useCubeStore((s) => s.pendingPlotResume);
+  const busy = useCubeStore((s) => s.busy);
 
   const active = plotting.status !== 'idle';
+  const hasPendingPlot = pendingPlotResume != null && busy === 'idle';
 
   return (
     <div className="status-bar">
+      {hasPendingPlot && (
+        <div className="resume-prompt">
+          <div className="resume-note">unfinished etch found</div>
+          <div className="resume-row">
+            <button className="accent" onClick={() => resumePendingPlot()}>
+              resume plotting
+            </button>
+            <button onClick={() => discardPendingPlot()}>keep partial</button>
+          </div>
+        </div>
+      )}
       {active && (
         <div className="plot-progress">
           <div className="plot-stage">

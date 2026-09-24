@@ -9,11 +9,14 @@ import { uploadAndSketch } from '../plotting/uploadFlow';
 import type { Complexity } from '../image-processing/types';
 import { emit } from '../utils/bus';
 import { abortPlot } from '../plotting/PlotSession';
+import { serializeSave, deserializeSave } from '../core/serialize';
+import { downloadJSON } from '../utils/download';
 
 const COMPLEXITIES: Complexity[] = ['minimal', 'standard', 'obsessed'];
 
 export function ControlPanel(): JSX.Element {
   const fileRef = useRef<HTMLInputElement>(null);
+  const loadRef = useRef<HTMLInputElement>(null);
   const scrambleNow = useCubeStore((s) => s.scrambleNow);
   const solveNow = useCubeStore((s) => s.solveNow);
   const undo = useCubeStore((s) => s.undo);
@@ -106,8 +109,51 @@ export function ControlPanel(): JSX.Element {
         <button onClick={() => clearActiveFace()}>clear face</button>
         <button onClick={() => clearAllStrokes()}>shake clean</button>
       </div>
+
+      <div className="panel-group">
+        <button onClick={() => saveFile()}>save file</button>
+        <button onClick={() => loadRef.current?.click()}>load file</button>
+        <input
+          ref={loadRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void loadFile(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
     </div>
   );
+}
+
+function saveFile(): void {
+  const s = useCubeStore.getState();
+  const wire = serializeSave(s.session);
+  downloadJSON(wire, 'twistdraw-cube.json');
+}
+
+async function loadFile(file: File): Promise<void> {
+  try {
+    const text = await file.text();
+    const session = deserializeSave(JSON.parse(text));
+    useCubeStore.getState().hydrate({
+      session,
+      undoStack: [],
+      redoStack: [],
+      ui: { plotting: { status: 'idle', stage: '', progress: 0 } },
+    });
+    useCubeStore.setState({
+      banner: { text: 'Artwork loaded', at: Date.now() },
+      pendingPlotResume: null,
+    });
+  } catch (err) {
+    useCubeStore.setState({
+      banner: { text: `Load failed: ${err instanceof Error ? err.message : String(err)}`, at: Date.now() },
+    });
+  }
 }
 
 export function triggerUpload(): void {
