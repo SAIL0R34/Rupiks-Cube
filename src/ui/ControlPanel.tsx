@@ -12,6 +12,7 @@ import { toSquareDataUrl, decodeDataUrl } from '../imaging/compose';
 import { DEMO_IMAGES } from '../imaging/demoPack';
 import { clearStoredSession } from '../store/session';
 import { posesMatchReference } from '../core/history';
+import { emit } from '../utils/bus';
 import { serializeSave, deserializeSave } from '../core/serialize';
 import { downloadJSON } from '../utils/download';
 import { downloadView } from '../three/viewExport';
@@ -28,6 +29,9 @@ const FACE_NAMES: Record<string, string> = {
 function faceName(f: string): string {
   return FACE_NAMES[f] ?? f;
 }
+
+/** radians per view-rotation press (36°) */
+const STEP = Math.PI / 5;
 
 export function ControlPanel(): JSX.Element | null {
   const scrambleNow = useCubeStore((s) => s.scrambleNow);
@@ -174,6 +178,35 @@ export function ControlPanel(): JSX.Element | null {
               </button>
             </div>
           )}
+          <div className="drawer-row">
+            <span className="drawer-label">rotate view</span>
+            {(
+              [
+                ['◀', 'orbit view left', 1, 0],
+                ['▶', 'orbit view right', -1, 0],
+                ['▲', 'tilt view up', 0, 1],
+                ['▼', 'tilt view down', 0, -1],
+              ] as Array<[string, string, number, number]>
+            ).map(([label, tip, dTheta, dPhi]) => (
+              <button
+                key={tip}
+                className="ghost view-mini"
+                data-tip={tip}
+                aria-label={tip}
+                onClick={() => emit('camera-orbit', { dTheta: dTheta * STEP, dPhi: dPhi * STEP })}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              className="ghost view-mini"
+              data-tip="reset the view"
+              aria-label="reset the view"
+              onClick={() => emit('camera-reset', {})}
+            >
+              ⌂
+            </button>
+          </div>
           <div className="drawer-row">
             <button
               className="ghost"
