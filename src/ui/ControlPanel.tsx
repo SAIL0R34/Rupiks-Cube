@@ -11,6 +11,7 @@ import type { Face } from '../core/faces';
 import { toSquareDataUrl, decodeDataUrl } from '../imaging/compose';
 import { DEMO_IMAGES } from '../imaging/demoPack';
 import { clearStoredSession } from '../store/session';
+import { posesMatchReference } from '../core/history';
 import { serializeSave, deserializeSave } from '../core/serialize';
 import { downloadJSON } from '../utils/download';
 import { downloadView } from '../three/viewExport';
@@ -34,8 +35,15 @@ export function ControlPanel(): JSX.Element | null {
   const undo = useCubeStore((s) => s.undo);
   const redo = useCubeStore((s) => s.redo);
   const newSession = useCubeStore((s) => s.newSession);
+  const timerOn = useCubeStore((s) => s.timerOn);
+  const setTimerOn = useCubeStore((s) => s.setTimerOn);
   const images = useCubeStore((s) => s.session.images);
   const setFaceImage = useCubeStore((s) => s.setFaceImage);
+  // swapping mid-scramble is unsolvable by construction — only allow it when
+  // the cube sits at its reference poses (the swap then re-defines the puzzle)
+  const canSwap = useCubeStore((s) =>
+    s.session.reference ? posesMatchReference(s.session, s.session.reference) : true,
+  );
   const started = useCubeStore((s) => hasAllImages(s.session));
   const busy = useCubeStore((s) => s.busy);
   const [open, setOpen] = useState(false);
@@ -117,8 +125,13 @@ export function ControlPanel(): JSX.Element | null {
               <button
                 key={f}
                 className={`face-thumb ${swapFace === f ? 'on' : ''}`}
-                data-tip={`new picture for the ${faceName(f)} face`}
+                data-tip={
+                  canSwap
+                    ? `new picture for the ${faceName(f)} face`
+                    : 'solve the cube first — swapping mid-scramble makes it unsolvable'
+                }
                 aria-label={`new picture for the ${faceName(f)} face`}
+                disabled={!canSwap}
                 onClick={() => setSwapFace((cur) => (cur === f ? null : (f as Face)))}
               >
                 <img src={images[f as Face] ?? undefined} alt="" />
@@ -126,7 +139,12 @@ export function ControlPanel(): JSX.Element | null {
               </button>
             ))}
           </div>
-          {swapFace && (
+          {!canSwap && (
+            <div className="drawer-row">
+              <span className="drawer-note">solve the cube before swapping pictures</span>
+            </div>
+          )}
+          {swapFace && canSwap && (
             <div className="drawer-row repaint-row">
               <span className="drawer-label">{faceName(swapFace)}</span>
               <div className="drawer-demo-strip">
@@ -177,6 +195,14 @@ export function ControlPanel(): JSX.Element | null {
               data-tip="screenshot this exact view"
             >
               png
+            </button>
+            <button
+              className={`ghost ${timerOn ? 'on' : ''}`}
+              data-tip="race the clock: scramble → solve (T)"
+              aria-pressed={timerOn}
+              onClick={() => setTimerOn(!timerOn)}
+            >
+              timer {timerOn ? 'on' : 'off'}
             </button>
             <button
               className="ghost danger"

@@ -70,10 +70,12 @@ export function snapshotReference(sess: Session): RefSnapshot {
 }
 
 /**
- * Is the cube exactly at `ref`? Poses + orientations exact AND no repaint has
- * happened since the snapshot (paintVersion equality).
+ * Do the cubies sit exactly at `ref`'s poses+orientations? (Art-independent —
+ * used to decide whether a face swap is safe: swapping while scrambled makes
+ * the puzzle unsolvable, because the new tiles land on whichever stickers
+ * currently face that way.)
  */
-export function matchesReference(sess: Session, ref: RefSnapshot): boolean {
+export function posesMatchReference(sess: Session, ref: RefSnapshot): boolean {
   if (sess.cube.cubies.length !== ref.poses.length) return false;
   for (const c of sess.cube.cubies) {
     const want = ref.poses[c.id];
@@ -81,7 +83,15 @@ export function matchesReference(sess: Session, ref: RefSnapshot): boolean {
     if (c.pos[0] !== want.p[0] || c.pos[1] !== want.p[1] || c.pos[2] !== want.p[2]) return false;
     if (orientationIndex(c.R) !== want.o) return false;
   }
-  return sess.paintVersion === ref.paintVersion;
+  return true;
+}
+
+/**
+ * Is the cube exactly at `ref`? Poses + orientations exact AND no repaint has
+ * happened since the snapshot (paintVersion equality).
+ */
+export function matchesReference(sess: Session, ref: RefSnapshot): boolean {
+  return posesMatchReference(sess, ref) && sess.paintVersion === ref.paintVersion;
 }
 
 // --- command application (the redo path) ------------------------------------

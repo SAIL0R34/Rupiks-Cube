@@ -10,6 +10,7 @@ const KEYS: Array<[string, string]> = [
   ['M E S', 'twist the middle slices'],
   ['Space', 'scramble'],
   ['Enter', 'solve back to your pictures'],
+  ['T', 'toggle the solve timer (off by default)'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
   ['more ▾', 'swap a face picture, save/load, export'],
 ];

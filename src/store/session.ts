@@ -5,7 +5,7 @@
  * Old v1 key (etch era) is cleared.
  */
 
-import { useCubeStore } from './useCubeStore';
+import { useCubeStore, hasAllImages } from './useCubeStore';
 import { serializeSession, deserializeSession } from '../core/serialize';
 
 const KEY = 'rupiks.session.v1';
@@ -58,12 +58,15 @@ export function saveSession(): void {
   try {
     const s = useCubeStore.getState();
     if (s.busy !== 'idle') return; // never save mid-turn
+    // nothing worth persisting until the puzzle exists — skip (and never
+    // nag about autosave) during onboarding
+    if (!hasAllImages(s.session)) return;
     const wire = serializeSession(s.session, s.undoStack, s.redoStack);
     localStorage.setItem(KEY, JSON.stringify(wire));
     quotaWarned = false;
   } catch (err) {
     console.warn('[rupiks] session autosave failed:', err);
-    if (!quotaWarned) {
+    if (!quotaWarned && hasAllImages(useCubeStore.getState().session)) {
       quotaWarned = true;
       useCubeStore.setState({
         banner: { text: 'Autosave failed (storage full?) — use Save file', at: Date.now() },

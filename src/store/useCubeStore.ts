@@ -15,6 +15,7 @@ import type { Face } from '../core/faces';
 import { FACES } from '../core/faces';
 import {
   matchesReference,
+  posesMatchReference,
   snapshotReference,
   movesSinceReference,
   inverseOf,
@@ -57,6 +58,14 @@ interface CubeStore {
   sessionRestored: boolean;
   /** celebration fires only on not-solved → solved transitions */
   wasSolved: boolean;
+  /** solve timer: epoch ms of the last scramble (null = not racing) */
+  timerStartedAt: number | null;
+  /** final time of the last completed solve */
+  lastSolveMs: number | null;
+  /** best solve time ever (persisted separately in localStorage) */
+  bestSolveMs: number | null;
+  /** timer is opt-in — off by default */
+  timerOn: boolean;
 
   // --- turn machinery ---
   enqueueTurns: (tokens: MoveToken[], opts?: Partial<Omit<TurnBatch, 'tokens'>>) => boolean;
@@ -78,6 +87,7 @@ interface CubeStore {
   clearBanner: () => void;
   scrambleNow: (seed?: number) => void;
   solveNow: () => void;
+  setTimerOn: (on: boolean) => void;
 
   // --- session bridge ---
   hydrate: (data: {
@@ -92,6 +102,33 @@ export function hasAllImages(sess: Session): boolean {
   return FACES.every((f) => typeof sess.images[f] === 'string');
 }
 
+const BEST_KEY = 'rupiks.best-ms';
+const TIMER_KEY = 'rupiks.timer-on';
+
+function readTimerOn(): boolean {
+  try {
+    return localStorage.getItem(TIMER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function readBestSolve(): number | null {
+  try {
+    const raw = localStorage.getItem(BEST_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatMs(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
 export const useCubeStore = create<CubeStore>((set, get) => ({
   session: createSession(),
   version: 0,
@@ -103,6 +140,10 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
   banner: null,
   sessionRestored: false,
   wasSolved: false,
+  timerStartedAt: null,
+  lastSolveMs: null,
+  bestSolveMs: readBestSolve(),
+  timerOn: readTimerOn(),
 
   // --- turns ---
 
@@ -159,9 +200,32 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     }
     const now = matchesReference(sess, sess.reference);
     if (now && !s.wasSolved) {
+      // stop the clock on a genuine solve arrival (only when the timer is on)
+      let elapsed: number | null = null;
+      let best = s.bestSolveMs;
+      if (s.timerStartedAt !== null && s.timerOn) {
+        elapsed = Date.now() - s.timerStartedAt;
+        if (best === null || elapsed < best) {
+          best = elapsed;
+          try {
+            localStorage.setItem(BEST_KEY, String(Math.round(elapsed)));
+          } catch {
+            /* best-time persistence is best-effort */
+          }
+        }
+      }
       set({
         wasSolved: true,
-        banner: { text: 'Solved — picture restored', at: Date.now() },
+        timerStartedAt: null,
+        lastSolveMs: elapsed ?? s.lastSolveMs,
+        bestSolveMs: best,
+        banner: {
+          text:
+            elapsed !== null
+              ? `Solved in ${formatMs(elapsed)}${best === elapsed ? ' — new best!' : ''}`
+              : 'Solved — picture restored',
+          at: Date.now(),
+        },
       });
       emit('celebrate', {});
     } else if (!now && s.wasSolved) {
@@ -254,7 +318,18 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     applyCommandEffect(session, { kind: 'setTiles', items });
     set({ session, version: get().version + 1 });
     get().pushCommand({ kind: 'setTiles', items });
-    get().checkSolved(); // a repaint un-solves; update the transition tracker
+    // A swap at the reference POSES re-defines the puzzle: the new art becomes
+    // the goal (a swap mid-scramble is blocked by the UI — it would be
+    // unsolvable). Re-snapshot silently so no confetti fires for an edit.
+    if (session.reference && posesMatchReference(session, session.reference)) {
+      const prev = session.reference;
+      const next = snapshotReference(session);
+      session.reference = next;
+      set({ session, wasSolved: true });
+      get().pushCommand({ kind: 'setReference', prev, next });
+    } else {
+      get().checkSolved(); // a repaint un-solves; update the transition tracker
+    }
   },
 
   startPuzzle: async (images) => {
@@ -287,7 +362,25 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
   scrambleNow: (seed = Date.now() % 2147483647) => {
     const tokens = generateScramble(seed);
     get().enqueueTurns(tokens, { fast: true, label: 'scramble' });
-    set({ banner: { text: 'Scrambled — solve to restore the picture', at: Date.now() } });
+    set({
+      timerStartedAt: useCubeStore.getState().timerOn ? Date.now() : null,
+      lastSolveMs: null,
+      banner: { text: 'Scrambled — solve to restore the picture', at: Date.now() },
+    });
+  },
+
+  setTimerOn: (on) => {
+    try {
+      localStorage.setItem(TIMER_KEY, on ? '1' : '0');
+    } catch {
+      /* preference persistence is best-effort */
+    }
+    set({
+      timerOn: on,
+      // switching off mid-race abandons the clock
+      timerStartedAt: on ? useCubeStore.getState().timerStartedAt : null,
+      lastSolveMs: on ? useCubeStore.getState().lastSolveMs : null,
+    });
   },
 
   solveNow: () => {
@@ -332,6 +425,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       banner: null,
       wasSolved: false,
       sessionRestored: false,
+      timerStartedAt: null,
+      lastSolveMs: null,
     });
   },
 }));

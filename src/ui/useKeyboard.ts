@@ -50,6 +50,11 @@ export function useKeyboard(): void {
         s.solveNow();
         return;
       }
+      if (e.key.toLowerCase() === 't' && !e.metaKey && !e.ctrlKey) {
+        // timer toggle (letters below skip when modifiers are held)
+        s.setTimerOn(!useCubeStore.getState().timerOn);
+        return;
+      }
 
       const mapped = LETTER_FACES[e.key.toLowerCase()];
       if (mapped) {
