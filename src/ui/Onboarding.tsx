@@ -10,7 +10,7 @@ import { useRef, useState } from 'react';
 import { useCubeStore, hasAllImages } from '../store/useCubeStore';
 import { FACES } from '../core/faces';
 import type { Face } from '../core/faces';
-import { toSquareDataUrl, loadBitmap } from '../imaging/compose';
+import { toSquareDataUrl, loadBitmap, decodeDataUrl } from '../imaging/compose';
 import { DEMO_IMAGES, samplePack } from '../imaging/demoPack';
 
 const NET: Array<{ face: Face; col: number; row: number }> = [
@@ -72,21 +72,32 @@ export function Onboarding(): JSX.Element | null {
     await applyToFace(face, toSquareDataUrl(bitmap, 'contain'));
   };
 
+  /**
+   * Demo pictures are cover-cropped to a square at pick time — the artworks
+   * fill their faces edge-to-edge with no letterbox bands (an already-square
+   * image composed later with 'contain' is an identity, so nothing downstream
+   * can reintroduce borders).
+   */
+  const coverSquare = async (url: string): Promise<string> =>
+    toSquareDataUrl(await decodeDataUrl(url), 'cover');
+
   /** demo thumbnail → next empty slot (or the repaint target) */
   const useDemo = async (file: string) => {
+    const squared = await coverSquare(file);
     if (single) {
-      await applyToFace(repaintFace!, file);
+      await applyToFace(repaintFace!, squared);
       return;
     }
     const nextEmpty = FACES.find((f) => typeof images[f] !== 'string');
-    if (nextEmpty) await applyToFace(nextEmpty, file);
+    if (nextEmpty) await applyToFace(nextEmpty, squared);
   };
 
-  const shufflePack = () => {
+  const shufflePack = async () => {
     const picks6 = samplePack(6);
+    const squared = await Promise.all(picks6.map((p) => coverSquare(p.file)));
     const next: Partial<Record<Face, string>> = {};
     FACES.forEach((f, i) => {
-      next[f] = picks6[i].file;
+      next[f] = squared[i];
     });
     setPicks(next);
   };
@@ -150,7 +161,7 @@ export function Onboarding(): JSX.Element | null {
           <div className="demo-head">
             <span className="demo-label">free starter pack — public-domain art</span>
             {!single && (
-              <button className="ghost demo-shuffle" onClick={() => shufflePack()}>
+              <button className="ghost demo-shuffle" onClick={() => void shufflePack()}>
                 shuffle onto all faces
               </button>
             )}
