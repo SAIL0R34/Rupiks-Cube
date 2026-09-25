@@ -137,6 +137,7 @@ export function Onboarding(): JSX.Element | null {
                 key={face}
                 className={`net-slot ${img ? 'filled' : ''} ${isTarget ? 'target' : ''} ${single && !isTarget ? 'dim' : ''}`}
                 style={{ gridColumn: col + 1, gridRow: row + 1 }}
+                data-tip={`choose a picture for the ${FACE_NAMES[face]} face — drop a file here works too`}
                 onClick={() => pickFile(face)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
@@ -161,7 +162,11 @@ export function Onboarding(): JSX.Element | null {
           <div className="demo-head">
             <span className="demo-label">free starter pack — public-domain art</span>
             {!single && (
-              <button className="ghost demo-shuffle" onClick={() => void shufflePack()}>
+              <button
+                className="ghost demo-shuffle"
+                onClick={() => void shufflePack()}
+                data-tip="six random pack pictures, one per face"
+              >
                 shuffle onto all faces
               </button>
             )}
@@ -171,7 +176,8 @@ export function Onboarding(): JSX.Element | null {
               <button
                 key={d.file}
                 className="demo-thumb"
-                title={`${d.title} — ${d.artist}`}
+                data-tip={`place “${d.title}” — ${d.artist}`}
+                aria-label={`place ${d.title} by ${d.artist}`}
                 onClick={() => void useDemo(d.file)}
               >
                 <img src={d.file} alt={`${d.title} by ${d.artist}`} loading="lazy" />

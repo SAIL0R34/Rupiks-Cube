@@ -31,7 +31,7 @@ export function HelpOverlay(): JSX.Element {
 
   return (
     <>
-      <button className="help-btn" onClick={() => setOpen((v) => !v)} aria-label="help">
+      <button className="help-btn" onClick={() => setOpen((v) => !v)} aria-label="help" data-tip="controls & help — ?">
         ?
       </button>
       {open && (
