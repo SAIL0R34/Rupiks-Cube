@@ -33,6 +33,19 @@ function faceName(f: string): string {
 /** radians per view-rotation press (36°) */
 const STEP = Math.PI / 5;
 
+const KEYS: Array<[string, string]> = [
+  ['drag a row / column', 'twist that layer — middle rows work too'],
+  ['drag empty space', 'orbit the cube (wheel zooms)'],
+  ['more ▾ → rotate view', '◀ ▶ ▲ ▼ buttons · ⌂ resets the view'],
+  ['U D L R F B', 'twist that face (+⇧ for the other way)'],
+  ['M E S', 'twist the middle slices'],
+  ['Space', 'scramble'],
+  ['Enter', 'solve back to your pictures'],
+  ['T', 'toggle the solve timer (off by default)'],
+  ['P', 'pause / resume the timer'],
+  ['⌘Z / ⇧⌘Z', 'undo / redo'],
+];
+
 export function ControlPanel(): JSX.Element | null {
   const scrambleNow = useCubeStore((s) => s.scrambleNow);
   const solveNow = useCubeStore((s) => s.solveNow);
@@ -53,6 +66,7 @@ export function ControlPanel(): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [swapFace, setSwapFace] = useState<Face | null>(null);
   const [applying, setApplying] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
 
@@ -251,6 +265,26 @@ export function ControlPanel(): JSX.Element | null {
               start over
             </button>
           </div>
+          <div className="drawer-row">
+            <button
+              className="ghost"
+              onClick={() => setShowKeys((v) => !v)}
+              aria-expanded={showKeys}
+              data-tip="the key bindings"
+            >
+              controls {showKeys ? '▴' : '▾'}
+            </button>
+          </div>
+          {showKeys && (
+            <div className="keys-list">
+              {KEYS.map(([k, v]) => (
+                <div className="key-row" key={k}>
+                  <span className="key">{k}</span>
+                  <span className="key-desc">{v}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <input
             ref={fileRef}
             type="file"

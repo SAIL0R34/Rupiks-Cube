@@ -4,7 +4,6 @@ import { useKeyboard } from './ui/useKeyboard';
 import { Onboarding } from './ui/Onboarding';
 import { ControlPanel } from './ui/ControlPanel';
 import { StatusBar } from './ui/StatusBar';
-import { HelpOverlay } from './ui/HelpOverlay';
 import { burstConfetti } from './ui/confetti';
 import { useCubeStore, hasAllImages } from './store/useCubeStore';
 import { on } from './utils/bus';
@@ -31,7 +30,6 @@ export default function App(): JSX.Element {
       {!started && <Onboarding />}
       <StatusBar />
       <ControlPanel />
-      {started && <HelpOverlay />}
     </div>
   );
 }

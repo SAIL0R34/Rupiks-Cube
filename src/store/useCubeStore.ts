@@ -60,6 +60,10 @@ interface CubeStore {
   wasSolved: boolean;
   /** solve timer: epoch ms of the last scramble (null = not racing) */
   timerStartedAt: number | null;
+  /** elapsed frozen while paused (0 while running) */
+  timerAccumMs: number;
+  /** true between pause and resume */
+  timerPaused: boolean;
   /** final time of the last completed solve */
   lastSolveMs: number | null;
   /** best solve time ever (persisted separately in localStorage) */
@@ -88,6 +92,7 @@ interface CubeStore {
   scrambleNow: (seed?: number) => void;
   solveNow: () => void;
   setTimerOn: (on: boolean) => void;
+  toggleTimerPause: () => void;
 
   // --- session bridge ---
   hydrate: (data: {
@@ -141,6 +146,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
   sessionRestored: false,
   wasSolved: false,
   timerStartedAt: null,
+  timerAccumMs: 0,
+  timerPaused: false,
   lastSolveMs: null,
   bestSolveMs: readBestSolve(),
   timerOn: readTimerOn(),
@@ -203,8 +210,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       // stop the clock on a genuine solve arrival (only when the timer is on)
       let elapsed: number | null = null;
       let best = s.bestSolveMs;
-      if (s.timerStartedAt !== null && s.timerOn) {
-        elapsed = Date.now() - s.timerStartedAt;
+      if (s.timerOn && (s.timerStartedAt !== null || s.timerPaused)) {
+        elapsed = s.timerAccumMs + (s.timerStartedAt !== null ? Date.now() - s.timerStartedAt : 0);
         if (best === null || elapsed < best) {
           best = elapsed;
           try {
@@ -217,6 +224,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       set({
         wasSolved: true,
         timerStartedAt: null,
+        timerAccumMs: 0,
+        timerPaused: false,
         lastSolveMs: elapsed ?? s.lastSolveMs,
         bestSolveMs: best,
         banner: {
@@ -364,6 +373,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     get().enqueueTurns(tokens, { fast: true, label: 'scramble' });
     set({
       timerStartedAt: useCubeStore.getState().timerOn ? Date.now() : null,
+      timerAccumMs: 0,
+      timerPaused: false,
       lastSolveMs: null,
       banner: { text: 'Scrambled — solve to restore the picture', at: Date.now() },
     });
@@ -379,8 +390,29 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       timerOn: on,
       // switching off mid-race abandons the clock
       timerStartedAt: on ? useCubeStore.getState().timerStartedAt : null,
+      timerAccumMs: 0,
+      timerPaused: false,
       lastSolveMs: on ? useCubeStore.getState().lastSolveMs : null,
     });
+  },
+
+  toggleTimerPause: () => {
+    const s = get();
+    if (!s.timerOn) return;
+    if (s.timerPaused) {
+      // resume: re-base the clock, keep the frozen accumulation
+      if (s.lastSolveMs === null) {
+        set({ timerPaused: false, timerStartedAt: Date.now() });
+      }
+      return;
+    }
+    if (s.timerStartedAt !== null) {
+      set({
+        timerPaused: true,
+        timerAccumMs: Date.now() - s.timerStartedAt,
+        timerStartedAt: null,
+      });
+    }
   },
 
   solveNow: () => {
@@ -426,6 +458,8 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       wasSolved: false,
       sessionRestored: false,
       timerStartedAt: null,
+      timerAccumMs: 0,
+      timerPaused: false,
       lastSolveMs: null,
     });
   },

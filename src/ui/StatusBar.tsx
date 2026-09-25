@@ -18,6 +18,9 @@ export function StatusBar(): JSX.Element | null {
   const busy = useCubeStore((s) => s.busy);
   const sessionRestored = useCubeStore((s) => s.sessionRestored);
   const timerStartedAt = useCubeStore((s) => s.timerStartedAt);
+  const timerAccumMs = useCubeStore((s) => s.timerAccumMs);
+  const timerPaused = useCubeStore((s) => s.timerPaused);
+  const toggleTimerPause = useCubeStore((s) => s.toggleTimerPause);
   const lastSolveMs = useCubeStore((s) => s.lastSolveMs);
   const bestSolveMs = useCubeStore((s) => s.bestSolveMs);
   const timerOn = useCubeStore((s) => s.timerOn);
@@ -37,6 +40,8 @@ export function StatusBar(): JSX.Element | null {
     return () => clearInterval(i);
   }, [timerStartedAt]);
 
+  void timerAccumMs; // displayed via runningElapsed; re-render on change
+
   useEffect(() => {
     if (!sessionRestored) return;
     setShowRestoreNote(true);
@@ -52,18 +57,33 @@ export function StatusBar(): JSX.Element | null {
 
   if (!started) return null;
 
+  const runningElapsed =
+    timerStartedAt !== null || timerPaused
+      ? timerAccumMs + (timerStartedAt !== null ? Date.now() - timerStartedAt : 0)
+      : null;
+
   const showTimer =
-    timerOn && (timerStartedAt !== null || lastSolveMs !== null || bestSolveMs !== null);
+    timerOn && (runningElapsed !== null || lastSolveMs !== null || bestSolveMs !== null);
 
   return (
     <div className="status-bar">
       {banner && <div className="banner" key={banner.at}>{banner.text}</div>}
       {showTimer && (
         <div className="timer-row">
-          {timerStartedAt !== null ? (
-            <span className="timer-chip running">
-              {formatMs(Date.now() - timerStartedAt)}
-            </span>
+          {runningElapsed !== null ? (
+            <>
+              <span className={`timer-chip ${timerPaused ? '' : 'running'}`}>
+                {timerPaused ? '⏸ ' : ''}{formatMs(runningElapsed)}
+              </span>
+              <button
+                className="timer-toggle"
+                onClick={() => toggleTimerPause()}
+                aria-label={timerPaused ? 'resume timer' : 'pause timer'}
+                data-tip={timerPaused ? 'resume the clock — P' : 'pause the clock — P'}
+              >
+                {timerPaused ? '▶' : '⏸'}
+              </button>
+            </>
           ) : lastSolveMs !== null ? (
             <span className="timer-chip">last {formatMs(lastSolveMs)}</span>
           ) : null}

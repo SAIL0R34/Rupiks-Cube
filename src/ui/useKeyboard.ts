@@ -55,6 +55,10 @@ export function useKeyboard(): void {
         s.setTimerOn(!useCubeStore.getState().timerOn);
         return;
       }
+      if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey) {
+        s.toggleTimerPause();
+        return;
+      }
 
       const mapped = LETTER_FACES[e.key.toLowerCase()];
       if (mapped) {
