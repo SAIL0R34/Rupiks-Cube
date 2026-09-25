@@ -322,7 +322,6 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       undoStack,
       redoStack,
       version: get().version + 1,
-      sessionRestored: true,
     });
   },
 
@@ -337,6 +336,7 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       repaintFace: null,
       banner: null,
       wasSolved: false,
+      sessionRestored: false,
     });
   },
 }));

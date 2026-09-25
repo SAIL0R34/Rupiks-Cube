@@ -83,6 +83,9 @@ export function restoreSession(): boolean {
       undoStack: parsed.undoStack,
       redoStack: parsed.redoStack,
     });
+    // only a genuine storage restore counts as "picking up where you left
+    // off" — file loads hydrate without this flag
+    useCubeStore.setState({ sessionRestored: true });
     return true;
   } catch (err) {
     console.warn('[rupiks] session restore failed:', err);

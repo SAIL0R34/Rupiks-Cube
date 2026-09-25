@@ -1,8 +1,10 @@
 /** StatusBar — banner, solve progress, restored note, first-time hint */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useCubeStore, hasAllImages } from '../store/useCubeStore';
 import { matchesReference } from '../core/history';
+
+const RESTORE_NOTE_MS = 4500;
 
 export function StatusBar(): JSX.Element | null {
   const banner = useCubeStore((s) => s.banner);
@@ -14,6 +16,15 @@ export function StatusBar(): JSX.Element | null {
   const solved = useCubeStore((s) =>
     s.session.reference ? matchesReference(s.session, s.session.reference) : false,
   );
+  // the restore note is transient: a few seconds after a genuine pickup, then gone
+  const [showRestoreNote, setShowRestoreNote] = useState(false);
+
+  useEffect(() => {
+    if (!sessionRestored) return;
+    setShowRestoreNote(true);
+    const t = setTimeout(() => setShowRestoreNote(false), RESTORE_NOTE_MS);
+    return () => clearTimeout(t);
+  }, [sessionRestored]);
 
   useEffect(() => {
     if (!banner) return;
@@ -29,8 +40,12 @@ export function StatusBar(): JSX.Element | null {
       {solving && (
         <div className="solve-note">solving… {useCubeStore.getState().turnBatches[0]?.tokens.length ?? 0} turns left</div>
       )}
-      {sessionRestored && !solving && <div className="restored-note">picked up where you left off</div>}
-      {!sessionRestored && !solved && <div className="hint">drag a row or column to twist · space to scramble</div>}
+      {showRestoreNote && !solving && (
+        <div className="restored-note">picked up where you left off</div>
+      )}
+      {!sessionRestored && !solved && (
+        <div className="hint">drag a row or column to twist · space to scramble</div>
+      )}
     </div>
   );
 }
