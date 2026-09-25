@@ -52,8 +52,7 @@ interface CubeStore {
   animating: boolean;
   undoStack: Command[];
   redoStack: Command[];
-  /** repaint picker target (null = closed); onboarding shows while !started */
-  repaintFace: Face | null;
+  /** transient toast message (auto-clears) */
   banner: { text: string; at: number } | null;
   sessionRestored: boolean;
   /** celebration fires only on not-solved → solved transitions */
@@ -74,7 +73,6 @@ interface CubeStore {
   // --- painting ---
   setFaceImage: (face: Face, sourceDataUrl: string) => Promise<void>;
   startPuzzle: (images: Partial<Record<Face, string>>) => Promise<void>;
-  setRepaintFace: (face: Face | null) => void;
 
   // --- ui ---
   clearBanner: () => void;
@@ -102,7 +100,6 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
   animating: false,
   undoStack: [],
   redoStack: [],
-  repaintFace: null,
   banner: null,
   sessionRestored: false,
   wasSolved: false,
@@ -282,7 +279,6 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
     set({ banner: { text: 'Ready — drag a row or column to twist', at: Date.now() } });
   },
 
-  setRepaintFace: (face) => set({ repaintFace: face }),
 
   // --- ui ---
 
@@ -333,7 +329,6 @@ export const useCubeStore = create<CubeStore>((set, get) => ({
       turnBatches: [],
       busy: 'idle',
       version: get().version + 1,
-      repaintFace: null,
       banner: null,
       wasSolved: false,
       sessionRestored: false,

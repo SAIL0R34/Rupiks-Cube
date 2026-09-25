@@ -1,17 +1,19 @@
 /**
  * ControlPanel — the simplified primary bar: scramble, solve, undo/redo, and
- * a "more" drawer for the rare stuff (repaint, files, exports, new session).
+ * a "more" drawer. The drawer's face swap shows the CURRENT picture on each
+ * face; picking one offers the demo pack + upload right there.
  */
 
 import { useRef, useState } from 'react';
 import { useCubeStore, hasAllImages } from '../store/useCubeStore';
 import { FACES } from '../core/faces';
 import type { Face } from '../core/faces';
+import { toSquareDataUrl, decodeDataUrl } from '../imaging/compose';
+import { DEMO_IMAGES } from '../imaging/demoPack';
+import { clearStoredSession } from '../store/session';
 import { serializeSave, deserializeSave } from '../core/serialize';
 import { downloadJSON } from '../utils/download';
-import { downloadNetPNG, downloadNetSVG } from '../net/netExport';
 import { downloadView } from '../three/viewExport';
-import { clearStoredSession } from '../store/session';
 
 const FACE_NAMES: Record<string, string> = {
   U: 'up',
@@ -31,32 +33,31 @@ export function ControlPanel(): JSX.Element | null {
   const solveNow = useCubeStore((s) => s.solveNow);
   const undo = useCubeStore((s) => s.undo);
   const redo = useCubeStore((s) => s.redo);
-  const setRepaintFace = useCubeStore((s) => s.setRepaintFace);
   const newSession = useCubeStore((s) => s.newSession);
+  const images = useCubeStore((s) => s.session.images);
+  const setFaceImage = useCubeStore((s) => s.setFaceImage);
   const started = useCubeStore((s) => hasAllImages(s.session));
   const busy = useCubeStore((s) => s.busy);
   const [open, setOpen] = useState(false);
-  const loadRef = useRef<HTMLInputElement>(null);
+  const [swapFace, setSwapFace] = useState<Face | null>(null);
+  const [applying, setApplying] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const jsonRef = useRef<HTMLInputElement>(null);
 
   if (!started) return null; // onboarding owns the screen
+
+  const coverSquare = async (url: string): Promise<string> =>
+    toSquareDataUrl(await decodeDataUrl(url), 'cover');
 
   const saveFile = () => {
     downloadJSON(serializeSave(useCubeStore.getState().session), 'rupiks-cube.json');
   };
 
-  const loadFile = async (file: File) => {
-    try {
-      const session = deserializeSave(JSON.parse(await file.text()));
-      useCubeStore.getState().hydrate({
-        session,
-        undoStack: [],
-        redoStack: [],
-      });
-    } catch (err) {
-      useCubeStore.setState({
-        banner: { text: `Load failed: ${err instanceof Error ? err.message : String(err)}`, at: Date.now() },
-      });
-    }
+  const applyPicture = async (source: string) => {
+    if (!swapFace) return;
+    setApplying(true);
+    await setFaceImage(swapFace, source);
+    setApplying(false);
   };
 
   return (
@@ -98,9 +99,12 @@ export function ControlPanel(): JSX.Element | null {
         </button>
         <button
           className="ghost"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setOpen((v) => !v);
+            if (open) setSwapFace(null);
+          }}
           aria-expanded={open}
-          data-tip="face pictures · save/load · exports"
+          data-tip="swap face pictures · start over"
         >
           more {open ? '▴' : '▾'}
         </button>
@@ -108,46 +112,75 @@ export function ControlPanel(): JSX.Element | null {
       {open && (
         <div className="drawer">
           <div className="drawer-row">
-            <span className="drawer-label">face picture</span>
+            <span className="drawer-label">swap a face</span>
             {FACES.map((f) => (
               <button
                 key={f}
-                className="ghost face-btn"
-                onClick={() => setRepaintFace(f as Face)}
-                data-tip={`give the ${faceName(f)} face a new picture`}
+                className={`face-thumb ${swapFace === f ? 'on' : ''}`}
+                data-tip={`new picture for the ${faceName(f)} face`}
+                aria-label={`new picture for the ${faceName(f)} face`}
+                onClick={() => setSwapFace((cur) => (cur === f ? null : (f as Face)))}
               >
-                {f}
+                <img src={images[f as Face] ?? undefined} alt="" />
+                <span className="face-thumb-tag">{f}</span>
               </button>
             ))}
           </div>
+          {swapFace && (
+            <div className="drawer-row repaint-row">
+              <span className="drawer-label">{faceName(swapFace)}</span>
+              <div className="drawer-demo-strip">
+                {DEMO_IMAGES.map((d) => (
+                  <button
+                    key={d.file}
+                    className="drawer-demo-thumb"
+                    data-tip={`place “${d.title}” — ${d.artist}`}
+                    aria-label={`place ${d.title} by ${d.artist}`}
+                    disabled={applying}
+                    onClick={() => void applyPicture(d.file)}
+                  >
+                    <img src={d.file} alt="" loading="lazy" />
+                  </button>
+                ))}
+                <button
+                  className="drawer-upload"
+                  data-tip="use your own picture"
+                  disabled={applying}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  ↑
+                </button>
+              </div>
+              <button className="ghost small" onClick={() => setSwapFace(null)} data-tip="collapse">
+                done
+              </button>
+            </div>
+          )}
           <div className="drawer-row">
-            <button className="ghost" onClick={() => saveFile()} data-tip="download this puzzle as a shareable file">
-              save file
-            </button>
-            <button className="ghost" onClick={() => loadRef.current?.click()} data-tip="open a saved puzzle file">
-              load file
+            <button
+              className="ghost"
+              onClick={() => saveFile()}
+              data-tip="download this puzzle as a shareable file"
+            >
+              save
             </button>
             <button
               className="ghost"
-              onClick={() => downloadNetPNG(useCubeStore.getState().session)}
-              data-tip="the unfolded cube as PNG — shows the current scramble"
+              onClick={() => jsonRef.current?.click()}
+              data-tip="open a saved puzzle file"
             >
-              net png
+              load
             </button>
             <button
               className="ghost"
-              onClick={() => downloadNetSVG(useCubeStore.getState().session)}
-              data-tip="the unfolded cube as SVG"
+              onClick={() => void downloadView()}
+              data-tip="screenshot this exact view"
             >
-              net svg
+              png
             </button>
-            <button className="ghost" onClick={() => void downloadView()} data-tip="screenshot this exact view">
-              view png
-            </button>
-          </div>
-          <div className="drawer-row">
             <button
               className="ghost danger"
+              data-tip="fresh cube, fresh pictures"
               onClick={() => {
                 if (window.confirm('Start over? The current cube and pictures are discarded.')) {
                   clearStoredSession();
@@ -155,19 +188,52 @@ export function ControlPanel(): JSX.Element | null {
                   setOpen(false);
                 }
               }}
-              data-tip="fresh cube, fresh pictures"
             >
               start over
             </button>
           </div>
           <input
-            ref={loadRef}
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const url = URL.createObjectURL(file);
+                void decodeDataUrl(url)
+                  .then((img) => applyPicture(toSquareDataUrl(img, 'contain')))
+                  .finally(() => URL.revokeObjectURL(url));
+              }
+              e.target.value = '';
+            }}
+          />
+          <input
+            ref={jsonRef}
             type="file"
             accept="application/json,.json"
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void loadFile(file);
+              if (file) {
+                void file.text().then((text) => {
+                  try {
+                    const session = deserializeSave(JSON.parse(text));
+                    useCubeStore.getState().hydrate({
+                      session,
+                      undoStack: [],
+                      redoStack: [],
+                    });
+                  } catch (err) {
+                    useCubeStore.setState({
+                      banner: {
+                        text: `Load failed: ${err instanceof Error ? err.message : String(err)}`,
+                        at: Date.now(),
+                      },
+                    });
+                  }
+                });
+              }
               e.target.value = '';
             }}
           />

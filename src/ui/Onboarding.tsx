@@ -2,8 +2,8 @@
  * Onboarding — the 6-slot face picker (cube-net layout) shown until every
  * face has an image. Uploads are the primary path; the free public-domain
  * starter pack is offered alongside (click a thumbnail to fill the next
- * empty slot, or shuffle the pack onto all faces). Doubles as the
- * single-face repaint picker when `repaintFace` is set.
+ * empty slot, or shuffle the pack onto all faces). Face swaps after start
+ * live in the ControlPanel drawer.
  */
 
 import { useRef, useState } from 'react';
@@ -34,9 +34,6 @@ const FACE_NAMES: Record<Face, string> = {
 export function Onboarding(): JSX.Element | null {
   const session = useCubeStore((s) => s.session);
   const startPuzzle = useCubeStore((s) => s.startPuzzle);
-  const setFaceImage = useCubeStore((s) => s.setFaceImage);
-  const repaintFace = useCubeStore((s) => s.repaintFace);
-  const setRepaintFace = useCubeStore((s) => s.setRepaintFace);
   const [picks, setPicks] = useState<Partial<Record<Face, string>>>({});
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -44,52 +41,37 @@ export function Onboarding(): JSX.Element | null {
 
   const images = { ...session.images, ...picks };
   const complete = FACES.every((f) => typeof images[f] === 'string');
-  const single = repaintFace !== null;
 
-  if (!single && hasAllImages(session)) return null; // done onboarding
+  if (hasAllImages(session)) return null; // done onboarding
 
   const pickFile = (face: Face) => {
     slotRef.current = face;
     fileRef.current?.click();
   };
 
-  /** apply a picture (upload dataURL or demo URL) to a face */
-  const applyToFace = async (face: Face, source: string) => {
-    if (single) {
-      setBusy(true);
-      await setFaceImage(face, source);
-      setBusy(false);
-      setRepaintFace(null);
-    } else {
-      setPicks((p) => ({ ...p, [face]: source }));
-    }
-  };
+  /**
+   * Demo pictures are cover-cropped to a square at pick time — the artworks
+   * fill their faces edge-to-edge with no letterbox bands (an already-square
+   * image composed later with 'contain' is an identity, so nothing downstream
+   * can reintroduce borders). Uploads keep 'contain' — never surprise-crop a
+   * user's own picture.
+   */
+  const coverSquare = async (url: string): Promise<string> =>
+    toSquareDataUrl(await decodeDataUrl(url), 'cover');
 
   const onFile = async (file: File) => {
     const face = slotRef.current;
     if (!face) return;
     const bitmap = await loadBitmap(file);
-    await applyToFace(face, toSquareDataUrl(bitmap, 'contain'));
+    setPicks((p) => ({ ...p, [face]: toSquareDataUrl(bitmap, 'contain') }));
   };
 
-  /**
-   * Demo pictures are cover-cropped to a square at pick time — the artworks
-   * fill their faces edge-to-edge with no letterbox bands (an already-square
-   * image composed later with 'contain' is an identity, so nothing downstream
-   * can reintroduce borders).
-   */
-  const coverSquare = async (url: string): Promise<string> =>
-    toSquareDataUrl(await decodeDataUrl(url), 'cover');
-
-  /** demo thumbnail → next empty slot (or the repaint target) */
+  /** demo thumbnail → next empty slot */
   const useDemo = async (file: string) => {
-    const squared = await coverSquare(file);
-    if (single) {
-      await applyToFace(repaintFace!, squared);
-      return;
-    }
     const nextEmpty = FACES.find((f) => typeof images[f] !== 'string');
-    if (nextEmpty) await applyToFace(nextEmpty, squared);
+    if (!nextEmpty) return;
+    const squared = await coverSquare(file);
+    setPicks((p) => ({ ...p, [nextEmpty]: squared }));
   };
 
   const shufflePack = async () => {
@@ -124,18 +106,16 @@ export function Onboarding(): JSX.Element | null {
       <div className="onboarding-card">
         <h1 className="brand">Rupiks Cube</h1>
         <p className="lede">
-          {single
-            ? `Choose a new picture for the ${FACE_NAMES[repaintFace!]} face — upload one or pick from the pack.`
-            : 'Put a picture on each face — your own, or the free starter pack below. Then scramble the cube and twist it back.'}
+          Put a picture on each face — your own, or the free starter pack below. Then
+          scramble the cube and twist it back.
         </p>
         <div className="net-picker">
           {NET.map(({ face, col, row }) => {
             const img = images[face];
-            const isTarget = single && repaintFace === face;
             return (
               <button
                 key={face}
-                className={`net-slot ${img ? 'filled' : ''} ${isTarget ? 'target' : ''} ${single && !isTarget ? 'dim' : ''}`}
+                className={`net-slot ${img ? 'filled' : ''}`}
                 style={{ gridColumn: col + 1, gridRow: row + 1 }}
                 data-tip={`choose a picture for the ${FACE_NAMES[face]} face — drop a file here works too`}
                 onClick={() => pickFile(face)}
@@ -161,15 +141,13 @@ export function Onboarding(): JSX.Element | null {
         <div className="demo-pack">
           <div className="demo-head">
             <span className="demo-label">free starter pack — public-domain art</span>
-            {!single && (
-              <button
-                className="ghost demo-shuffle"
-                onClick={() => void shufflePack()}
-                data-tip="six random pack pictures, one per face"
-              >
-                shuffle onto all faces
-              </button>
-            )}
+            <button
+              className="ghost demo-shuffle"
+              onClick={() => void shufflePack()}
+              data-tip="six random pack pictures, one per face"
+            >
+              shuffle onto all faces
+            </button>
           </div>
           <div className="demo-strip">
             {DEMO_IMAGES.map((d) => (
@@ -187,18 +165,9 @@ export function Onboarding(): JSX.Element | null {
         </div>
 
         <div className="onboarding-actions">
-          {!single && (
-            <>
-              <button className="primary" onClick={() => void start()} disabled={!complete || busy}>
-                {busy ? 'placing…' : complete ? 'start twisting' : `pick ${6 - FACES.filter((f) => images[f]).length} more`}
-              </button>
-            </>
-          )}
-          {single && (
-            <button className="ghost" onClick={() => setRepaintFace(null)}>
-              cancel
-            </button>
-          )}
+          <button className="primary" onClick={() => void start()} disabled={!complete || busy}>
+            {busy ? 'placing…' : complete ? 'start twisting' : `pick ${6 - FACES.filter((f) => images[f]).length} more`}
+          </button>
         </div>
       </div>
     </div>
