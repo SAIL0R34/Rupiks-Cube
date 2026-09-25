@@ -1,9 +1,9 @@
 {
-  "name": "twistdraw-cube",
+  "name": "rupiks-cube",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "TwistDraw Cube — a Rubik's cube you populate with etch-a-sketch style artwork from uploaded photos, then scramble and solve to reassemble.",
+  "description": "Rupiks Cube — a Rubik's cube made of your pictures: put a photo on every face, scramble, and twist it back together.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

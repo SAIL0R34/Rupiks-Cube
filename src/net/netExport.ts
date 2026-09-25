@@ -98,7 +98,7 @@ export async function downloadNetPNG(sess: Session): Promise<void> {
   const imgs = await Promise.all(SLOTS.map((s) => decodeDataUrl(urls[s.face])));
   SLOTS.forEach((s, k) => ctx.drawImage(imgs[k], s.x + 10, s.y + 10));
   canvas.toBlob((b) => {
-    if (b) downloadBlob(b, 'twistdraw-net.png');
+    if (b) downloadBlob(b, 'rupiks-net.png');
   }, 'image/png');
 }
 
@@ -116,5 +116,5 @@ export async function downloadNetSVG(sess: Session): Promise<void> {
     );
   }
   parts.push('</svg>');
-  downloadBlob(new Blob([parts.join('\n')], { type: 'image/svg+xml' }), 'twistdraw-net.svg');
+  downloadBlob(new Blob([parts.join('\n')], { type: 'image/svg+xml' }), 'rupiks-net.svg');
 }

@@ -8,8 +8,8 @@
 import { useCubeStore } from './useCubeStore';
 import { serializeSession, deserializeSession } from '../core/serialize';
 
-const KEY = 'twistdraw.session.v2';
-const LEGACY_KEY = 'twistdraw.session.v1';
+const KEY = 'rupiks.session.v1';
+const LEGACY_KEYS = ['twistdraw.session.v1', 'twistdraw.session.v2'];
 const DEBOUNCE_MS = 500;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -62,7 +62,7 @@ export function saveSession(): void {
     localStorage.setItem(KEY, JSON.stringify(wire));
     quotaWarned = false;
   } catch (err) {
-    console.warn('[twistdraw] session autosave failed:', err);
+    console.warn('[rupiks] session autosave failed:', err);
     if (!quotaWarned) {
       quotaWarned = true;
       useCubeStore.setState({
@@ -74,7 +74,7 @@ export function saveSession(): void {
 
 export function restoreSession(): boolean {
   try {
-    localStorage.removeItem(LEGACY_KEY);
+    for (const k of LEGACY_KEYS) localStorage.removeItem(k);
     const raw = localStorage.getItem(KEY);
     if (!raw) return false;
     const parsed = deserializeSession(JSON.parse(raw));
@@ -85,12 +85,12 @@ export function restoreSession(): boolean {
     });
     return true;
   } catch (err) {
-    console.warn('[twistdraw] session restore failed:', err);
+    console.warn('[rupiks] session restore failed:', err);
     return false;
   }
 }
 
 export function clearStoredSession(): void {
   localStorage.removeItem(KEY);
-  localStorage.removeItem(LEGACY_KEY);
+  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
 }

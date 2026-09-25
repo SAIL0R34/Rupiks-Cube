@@ -1,11 +1,11 @@
 /**
  * Serialization v2 — photo-cube formats.
  *
- *  SAVE FILE v2 (`twistdraw-cube/save`): shareable puzzle snapshot — cube
+ *  SAVE FILE v2 (`rupiks-cube/save`): shareable puzzle snapshot — cube
  *  poses, tile dataURLs (the actual pixels), the 6 source face images, move
  *  log, reference, paint version.
  *
- *  SESSION v2 (`twistdraw-cube/session`): full continuation — the save plus
+ *  SESSION v2 (`rupiks-cube/session`): full continuation — the save plus
  *  undo/redo stacks. Restore blits dataURLs straight onto tile canvases; no
  *  geometry re-derivation.
  */
@@ -22,7 +22,7 @@ import type { Face } from './faces';
 // --- wire types -------------------------------------------------------------
 
 interface SaveWire {
-  format: 'twistdraw-cube/save';
+  format: 'rupiks-cube/save';
   version: 2;
   cubies: Array<{ id: number; p: [number, number, number]; o: number }>;
   /** sticker id → tile dataURL (nulls are simply absent) */
@@ -43,7 +43,7 @@ interface CommandWire {
 }
 
 interface SessionWire {
-  format: 'twistdraw-cube/session';
+  format: 'rupiks-cube/session';
   version: 2;
   save: SaveWire;
   undo: CommandWire[];
@@ -54,7 +54,7 @@ interface SessionWire {
 
 export function serializeSave(sess: Session): SaveWire {
   return {
-    format: 'twistdraw-cube/save',
+    format: 'rupiks-cube/save',
     version: 2,
     cubies: sess.cube.cubies.map((c) => ({
       id: c.id,
@@ -70,8 +70,8 @@ export function serializeSave(sess: Session): SaveWire {
 }
 
 export function deserializeSave(wire: SaveWire): Session {
-  if (wire?.format !== 'twistdraw-cube/save' || wire.version !== 2) {
-    throw new Error('unrecognized save file (expected twistdraw-cube/save v2)');
+  if (wire?.format !== 'rupiks-cube/save' || wire.version !== 2) {
+    throw new Error('unrecognized save file (expected rupiks-cube/save v2)');
   }
   const base = createSolvedCube();
   const cubies: Cubie[] = wire.cubies.map((cw) => {
@@ -116,7 +116,7 @@ export function serializeSession(
     }
   };
   return {
-    format: 'twistdraw-cube/session',
+    format: 'rupiks-cube/session',
     version: 2,
     save: serializeSave(sess),
     undo: undo.map(cmdWire),
@@ -129,8 +129,8 @@ export function deserializeSession(wire: SessionWire): {
   undoStack: Command[];
   redoStack: Command[];
 } {
-  if (wire?.format !== 'twistdraw-cube/session' || wire.version !== 2) {
-    throw new Error('unrecognized session file (expected twistdraw-cube/session v2)');
+  if (wire?.format !== 'rupiks-cube/session' || wire.version !== 2) {
+    throw new Error('unrecognized session file (expected rupiks-cube/session v2)');
   }
   const session = deserializeSave(wire.save);
   const hydrate = (cw: CommandWire): Command => {

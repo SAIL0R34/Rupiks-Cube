@@ -18,5 +18,5 @@ export function captureView(): Promise<Blob> {
 }
 
 export async function downloadView(): Promise<void> {
-  downloadBlob(await captureView(), 'twistdraw-view.png');
+  downloadBlob(await captureView(), 'rupiks-view.png');
 }

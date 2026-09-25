@@ -37,7 +37,7 @@ export function HelpOverlay(): JSX.Element {
       {open && (
         <div className="help-overlay" onClick={() => setOpen(false)}>
           <div className="help-card" onClick={(e) => e.stopPropagation()}>
-            <h2>TwistDraw Cube</h2>
+            <h2>Rupiks Cube</h2>
             <p>
               Six of your pictures, one on each face. Twist the layers and the images
               shatter across the cube — solve it to put them back together.

@@ -28,7 +28,7 @@ export function ControlPanel(): JSX.Element | null {
   if (!started) return null; // onboarding owns the screen
 
   const saveFile = () => {
-    downloadJSON(serializeSave(useCubeStore.getState().session), 'twistdraw-cube.json');
+    downloadJSON(serializeSave(useCubeStore.getState().session), 'rupiks-cube.json');
   };
 
   const loadFile = async (file: File) => {

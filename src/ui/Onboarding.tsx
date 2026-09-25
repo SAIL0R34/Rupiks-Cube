@@ -1,7 +1,9 @@
 /**
  * Onboarding — the 6-slot face picker (cube-net layout) shown until every
- * face has an image. Doubles as the single-face repaint picker when
- * `repaintFace` is set.
+ * face has an image. Uploads are the primary path; the free public-domain
+ * starter pack is offered alongside (click a thumbnail to fill the next
+ * empty slot, or shuffle the pack onto all faces). Doubles as the
+ * single-face repaint picker when `repaintFace` is set.
  */
 
 import { useRef, useState } from 'react';
@@ -9,6 +11,7 @@ import { useCubeStore, hasAllImages } from '../store/useCubeStore';
 import { FACES } from '../core/faces';
 import type { Face } from '../core/faces';
 import { toSquareDataUrl, loadBitmap } from '../imaging/compose';
+import { DEMO_IMAGES, samplePack } from '../imaging/demoPack';
 
 const NET: Array<{ face: Face; col: number; row: number }> = [
   { face: 'U', col: 1, row: 0 },
@@ -50,27 +53,41 @@ export function Onboarding(): JSX.Element | null {
     fileRef.current?.click();
   };
 
+  /** apply a picture (upload dataURL or demo URL) to a face */
+  const applyToFace = async (face: Face, source: string) => {
+    if (single) {
+      setBusy(true);
+      await setFaceImage(face, source);
+      setBusy(false);
+      setRepaintFace(null);
+    } else {
+      setPicks((p) => ({ ...p, [face]: source }));
+    }
+  };
+
   const onFile = async (file: File) => {
     const face = slotRef.current;
     if (!face) return;
     const bitmap = await loadBitmap(file);
-    const squareUrl = toSquareDataUrl(bitmap, 'contain');
-    if (single) {
-      setBusy(true);
-      await setFaceImage(face, squareUrl);
-      setBusy(false);
-      setRepaintFace(null);
-    } else {
-      setPicks((p) => ({ ...p, [face]: squareUrl }));
-    }
+    await applyToFace(face, toSquareDataUrl(bitmap, 'contain'));
   };
 
-  const fillAll = async () => {
-    const first = FACES.find((f) => typeof images[f] === 'string');
-    if (!first) return;
-    const src = images[first]!;
+  /** demo thumbnail → next empty slot (or the repaint target) */
+  const useDemo = async (file: string) => {
+    if (single) {
+      await applyToFace(repaintFace!, file);
+      return;
+    }
+    const nextEmpty = FACES.find((f) => typeof images[f] !== 'string');
+    if (nextEmpty) await applyToFace(nextEmpty, file);
+  };
+
+  const shufflePack = () => {
+    const picks6 = samplePack(6);
     const next: Partial<Record<Face, string>> = {};
-    for (const f of FACES) next[f] = src;
+    FACES.forEach((f, i) => {
+      next[f] = picks6[i].file;
+    });
     setPicks(next);
   };
 
@@ -94,11 +111,11 @@ export function Onboarding(): JSX.Element | null {
         }}
       />
       <div className="onboarding-card">
-        <h1 className="brand">TwistDraw Cube</h1>
+        <h1 className="brand">Rupiks Cube</h1>
         <p className="lede">
           {single
-            ? `Choose a new picture for the ${FACE_NAMES[repaintFace!]} face.`
-            : 'Give every face a picture — then scramble the cube and twist it back.'}
+            ? `Choose a new picture for the ${FACE_NAMES[repaintFace!]} face — upload one or pick from the pack.`
+            : 'Put a picture on each face — your own, or the free starter pack below. Then scramble the cube and twist it back.'}
         </p>
         <div className="net-picker">
           {NET.map(({ face, col, row }) => {
@@ -128,12 +145,33 @@ export function Onboarding(): JSX.Element | null {
             );
           })}
         </div>
+
+        <div className="demo-pack">
+          <div className="demo-head">
+            <span className="demo-label">free starter pack — public-domain art</span>
+            {!single && (
+              <button className="ghost demo-shuffle" onClick={() => shufflePack()}>
+                shuffle onto all faces
+              </button>
+            )}
+          </div>
+          <div className="demo-strip">
+            {DEMO_IMAGES.map((d) => (
+              <button
+                key={d.file}
+                className="demo-thumb"
+                title={`${d.title} — ${d.artist}`}
+                onClick={() => void useDemo(d.file)}
+              >
+                <img src={d.file} alt={`${d.title} by ${d.artist}`} loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="onboarding-actions">
           {!single && (
             <>
-              <button className="ghost" onClick={() => void fillAll()} disabled={!complete}>
-                use one picture everywhere
-              </button>
               <button className="primary" onClick={() => void start()} disabled={!complete || busy}>
                 {busy ? 'placing…' : complete ? 'start twisting' : `pick ${6 - FACES.filter((f) => images[f]).length} more`}
               </button>
